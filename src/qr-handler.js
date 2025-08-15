@@ -1,19 +1,5 @@
 const qrcode = require('qrcode-terminal');
-const winston = require('winston');
-
-// Logger para el QR handler
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.simple()
-  ),
-  transports: [
-    new winston.transports.Console({
-      format: winston.format.simple()
-    })
-  ]
-});
+const { logger } = require('./logger');
 
 // Función para generar QR code visual
 async function generateQRCode(qr) {

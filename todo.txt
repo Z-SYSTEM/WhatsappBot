@@ -1,5 +1,0 @@
-Cuando se envía un mensaje quiero ver en el log: enviando mensaje a <numero>: <texto>, no service ni timestamp
-por qué haces // También enviar al endpoint interno ??
-se crean muchos backups
-unificar los logs, que se guarden por día para que no crezca
-hacer un GET a test, si responde, no arrancar, para evitar otra instancia
