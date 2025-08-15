@@ -107,7 +107,7 @@ dirs.forEach(dir => {
 });
 
 // Crear directorio de sesión si no existe
-const sessionDir = path.join('sessions', BOT_NAME);
+const sessionDir = 'sessions';
 fs.ensureDirSync(sessionDir);
 
 // Variables de WhatsApp optimizadas
@@ -206,7 +206,7 @@ async function sendFCMNotification(message) {
 // Función para hacer backup de la sesión - Solo cuando sea necesario
 async function backupSession(force = false) {
   try {
-    const sessionPath = path.join('sessions', `${BOT_NAME}`);
+    const sessionPath = 'sessions';
     const backupDir = 'backups';
     
     // Verificar si existe la sesión
@@ -281,7 +281,7 @@ async function cleanupOldBackups() {
 async function restoreSessionFromBackup() {
   try {
     const backupDir = 'backups';
-    const sessionPath = path.join('sessions', `${BOT_NAME}`);
+    const sessionPath = 'sessions';
     
     const backupFiles = await fs.readdir(backupDir);
     const botBackups = backupFiles.filter(file => file.startsWith(BOT_NAME));
@@ -304,7 +304,7 @@ async function restoreSessionFromBackup() {
 // Función para verificar si la sesión está corrupta
 async function isSessionCorrupted() {
   try {
-    const sessionPath = path.join('sessions', `${BOT_NAME}`);
+    const sessionPath = 'sessions';
     if (!await fs.pathExists(sessionPath)) {
       return false; // No hay sesión, no está corrupta
     }
