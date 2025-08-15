@@ -225,12 +225,12 @@ async function backupSession(force = false) {
       
       // Verificar si ya existe un backup reciente (menos de 24 horas)
       const existingBackups = await fs.readdir(backupDir);
-      const botBackups = existingBackups.filter(file => file.startsWith(BOT_NAME));
+      const timestampBackups = existingBackups.filter(file => /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/.test(file));
       
-      if (botBackups.length > 0) {
-        const latestBackup = botBackups.sort().pop();
-        const backupTime = parseInt(latestBackup.split('_')[1]);
-        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+      if (timestampBackups.length > 0) {
+        const latestBackup = timestampBackups.sort().pop();
+        const backupTime = new Date(latestBackup.replace(/-/g, ':').replace(' ', 'T'));
+        const oneDayAgo = new Date(Date.now() - (24 * 60 * 60 * 1000));
         
         if (backupTime > oneDayAgo) {
           logger.debug('Backup reciente encontrado (menos de 24 horas), saltando creación de nuevo backup');
@@ -240,7 +240,8 @@ async function backupSession(force = false) {
     }
     
     // Crear backup solo si es forzado o si no hay backup reciente
-    const backupPath = path.join(backupDir, `${BOT_NAME}_${Date.now()}`);
+    const timestamp = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '').replace(/:/g, '-');
+    const backupPath = path.join(backupDir, timestamp);
     await fs.copy(sessionPath, backupPath);
     logger.info(`Backup de sesión creado: ${backupPath}`);
     
@@ -257,12 +258,12 @@ async function cleanupOldBackups() {
   try {
     const backupDir = 'backups';
     const existingBackups = await fs.readdir(backupDir);
-    const botBackups = existingBackups.filter(file => file.startsWith(BOT_NAME));
+    const timestampBackups = existingBackups.filter(file => /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/.test(file));
     
-    if (botBackups.length > 3) {
+    if (timestampBackups.length > 3) {
       // Ordenar por timestamp (más antiguos primero)
-      const sortedBackups = botBackups.sort();
-      const backupsToDelete = sortedBackups.slice(0, botBackups.length - 3);
+      const sortedBackups = timestampBackups.sort();
+      const backupsToDelete = sortedBackups.slice(0, timestampBackups.length - 3);
       
       for (const backup of backupsToDelete) {
         const backupPath = path.join(backupDir, backup);
@@ -284,11 +285,11 @@ async function restoreSessionFromBackup() {
     const sessionPath = 'sessions';
     
     const backupFiles = await fs.readdir(backupDir);
-    const botBackups = backupFiles.filter(file => file.startsWith(BOT_NAME));
+    const timestampBackups = backupFiles.filter(file => /^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/.test(file));
     
-    if (botBackups.length > 0) {
+    if (timestampBackups.length > 0) {
       // Tomar el backup más reciente
-      const latestBackup = botBackups.sort().pop();
+      const latestBackup = timestampBackups.sort().pop();
       const backupPath = path.join(backupDir, latestBackup);
       
       await fs.copy(backupPath, sessionPath);
