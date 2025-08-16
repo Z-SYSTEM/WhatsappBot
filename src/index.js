@@ -659,8 +659,35 @@ async function handleIncomingMessage(msg) {
         logger.debug(`[DOWNLOAD] Iniciando descarga de imagen para ${tempMessageData.phoneNumber}`);
         logger.debug(`[DOWNLOAD] downloadMediaMessage disponible: ${typeof downloadMediaMessage}`);
         
-        const buffer = await downloadMediaMessage(msg);
-        logger.debug(`[DOWNLOAD] Buffer obtenido, tamaño: ${buffer.length} bytes`);
+        const result = await downloadMediaMessage(msg);
+        logger.debug(`[DOWNLOAD] Resultado obtenido, tipo: ${typeof result}, constructor: ${result.constructor.name}`);
+        
+        // Verificar si el resultado es un buffer o un objeto
+        let buffer;
+        if (Buffer.isBuffer(result)) {
+          buffer = result;
+          logger.debug(`[DOWNLOAD] Resultado es un Buffer, tamaño: ${buffer.length} bytes`);
+        } else if (result && typeof result === 'object') {
+          // Si es un objeto, buscar la propiedad que contiene los datos
+          logger.debug(`[DOWNLOAD] Resultado es un objeto, propiedades: ${Object.keys(result)}`);
+          
+          if (result.data) {
+            buffer = Buffer.from(result.data);
+            logger.debug(`[DOWNLOAD] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
+          } else if (result.buffer) {
+            buffer = Buffer.from(result.buffer);
+            logger.debug(`[DOWNLOAD] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
+          } else if (result.content) {
+            buffer = Buffer.from(result.content);
+            logger.debug(`[DOWNLOAD] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
+          } else {
+            // Intentar convertir todo el objeto a buffer
+            buffer = Buffer.from(JSON.stringify(result));
+            logger.debug(`[DOWNLOAD] Convertido objeto completo a buffer, tamaño: ${buffer.length} bytes`);
+          }
+        } else {
+          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+        }
         
         tempMessageData.data.data = buffer.toString('base64');
         logger.debug(`[DOWNLOAD] Imagen descargada exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
@@ -690,7 +717,25 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.videoMessage);
       
       try {
-        const buffer = await downloadMediaMessage(msg);
+        const result = await downloadMediaMessage(msg);
+        let buffer;
+        
+        if (Buffer.isBuffer(result)) {
+          buffer = result;
+        } else if (result && typeof result === 'object') {
+          if (result.data) {
+            buffer = Buffer.from(result.data);
+          } else if (result.buffer) {
+            buffer = Buffer.from(result.buffer);
+          } else if (result.content) {
+            buffer = Buffer.from(result.content);
+          } else {
+            buffer = Buffer.from(JSON.stringify(result));
+          }
+        } else {
+          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+        }
+        
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar video de ${tempMessageData.phoneNumber}: ${error.message}`);
@@ -707,7 +752,25 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.audioMessage);
       
       try {
-        const buffer = await downloadMediaMessage(msg);
+        const result = await downloadMediaMessage(msg);
+        let buffer;
+        
+        if (Buffer.isBuffer(result)) {
+          buffer = result;
+        } else if (result && typeof result === 'object') {
+          if (result.data) {
+            buffer = Buffer.from(result.data);
+          } else if (result.buffer) {
+            buffer = Buffer.from(result.buffer);
+          } else if (result.content) {
+            buffer = Buffer.from(result.content);
+          } else {
+            buffer = Buffer.from(JSON.stringify(result));
+          }
+        } else {
+          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+        }
+        
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar audio de ${tempMessageData.phoneNumber}: ${error.message}`);
@@ -725,7 +788,25 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.documentMessage);
       
       try {
-        const buffer = await downloadMediaMessage(msg);
+        const result = await downloadMediaMessage(msg);
+        let buffer;
+        
+        if (Buffer.isBuffer(result)) {
+          buffer = result;
+        } else if (result && typeof result === 'object') {
+          if (result.data) {
+            buffer = Buffer.from(result.data);
+          } else if (result.buffer) {
+            buffer = Buffer.from(result.buffer);
+          } else if (result.content) {
+            buffer = Buffer.from(result.content);
+          } else {
+            buffer = Buffer.from(JSON.stringify(result));
+          }
+        } else {
+          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+        }
+        
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar documento de ${tempMessageData.phoneNumber}: ${error.message}`);
@@ -742,7 +823,25 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
       
       try {
-        const buffer = await downloadMediaMessage(msg);
+        const result = await downloadMediaMessage(msg);
+        let buffer;
+        
+        if (Buffer.isBuffer(result)) {
+          buffer = result;
+        } else if (result && typeof result === 'object') {
+          if (result.data) {
+            buffer = Buffer.from(result.data);
+          } else if (result.buffer) {
+            buffer = Buffer.from(result.buffer);
+          } else if (result.content) {
+            buffer = Buffer.from(result.content);
+          } else {
+            buffer = Buffer.from(JSON.stringify(result));
+          }
+        } else {
+          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+        }
+        
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar sticker de ${tempMessageData.phoneNumber}: ${error.message}`);
