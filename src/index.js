@@ -1082,51 +1082,55 @@ async function handleIncomingMessage(msg) {
         logger.debug(`No se pudo descargar documento de ${tempMessageData.phoneNumber}: ${error.message}`);
         // No es un error crítico, continuar sin los datos del documento
       }
-    } else if (msg.message.stickerMessage) {
-      tempMessageData.type = _MESSAGE_TYPE_STICKER;
-      tempMessageData.hasMedia = true;
-      tempMessageData.data = {
-        mimetype: msg.message.stickerMessage.mimetype,
-        filename: 'sticker.webp'
-      };
-      
-      tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
-      
-      try {
-        const result = await downloadMediaMessage(msg);
-        let buffer;
-        
-        if (Buffer.isBuffer(result)) {
-          buffer = result;
-        } else if (result && typeof result === 'object') {
-          // Verificar si es un stream
-          if (result.readable || result.pipe || result.on) {
-            // Es un stream, convertirlo a buffer
-            const chunks = [];
-            for await (const chunk of result) {
-              chunks.push(chunk);
-            }
-            buffer = Buffer.concat(chunks);
-          } else {
-            if (result.data) {
-              buffer = Buffer.from(result.data);
-            } else if (result.buffer) {
-              buffer = Buffer.from(result.buffer);
-            } else if (result.content) {
-              buffer = Buffer.from(result.content);
-            } else {
-              buffer = Buffer.from(JSON.stringify(result));
-            }
-          }
-        } else {
-          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
-        }
-        
-        tempMessageData.data.data = buffer.toString('base64');
-      } catch (error) {
-        logger.debug(`No se pudo descargar sticker de ${tempMessageData.phoneNumber}: ${error.message}`);
-        // No es un error crítico, continuar sin los datos del sticker
-      }
+                 } else if (msg.message.stickerMessage) {
+               tempMessageData.type = _MESSAGE_TYPE_STICKER;
+               tempMessageData.hasMedia = true;
+               tempMessageData.data = {
+                 mimetype: msg.message.stickerMessage.mimetype || 'image/webp',
+                 filename: 'sticker.webp',
+                 stickerId: msg.message.stickerMessage.stickerId,
+                 packId: msg.message.stickerMessage.packId,
+                 packName: msg.message.stickerMessage.packName,
+                 packPublisher: msg.message.stickerMessage.packPublisher,
+                 isAnimated: msg.message.stickerMessage.isAnimated || false
+               };
+               
+               tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
+               
+               try {
+                 const result = await downloadMediaMessage(msg);
+                 let buffer;
+                 
+                 if (Buffer.isBuffer(result)) {
+                   buffer = result;
+                 } else if (result && typeof result === 'object') {
+                   if (result.readable || result.pipe || result.on) {
+                     const chunks = [];
+                     for await (const chunk of result) {
+                       chunks.push(chunk);
+                     }
+                     buffer = Buffer.concat(chunks);
+                   } else {
+                     if (result.data) {
+                       buffer = Buffer.from(result.data);
+                     } else if (result.buffer) {
+                       buffer = Buffer.from(result.buffer);
+                     } else if (result.content) {
+                       buffer = Buffer.from(result.content);
+                     } else {
+                       buffer = Buffer.from(JSON.stringify(result));
+                     }
+                   }
+                 } else {
+                   throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+                 }
+                 
+                 tempMessageData.data.data = buffer.toString('base64');
+                 logger.info(`[STICKER] Sticker descargado de ${tempMessageData.phoneNumber}`);
+               } catch (error) {
+                 logger.error(`[STICKER] Error descargando sticker de ${tempMessageData.phoneNumber}: ${error.message}`);
+                 // No es un error crítico, continuar sin los datos del sticker
+               }
     } else if (msg.message.locationMessage) {
       tempMessageData.type = _MESSAGE_TYPE_LOCATION;
       tempMessageData.data = {
@@ -1506,6 +1510,26 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
+      case _MESSAGE_TYPE_STICKER:
+        if (media && media.url) {
+          // Descargar sticker desde URL
+          const buffer = await downloadFromUrl(media.url, media.mimetype);
+          sentMessage = await sock.sendMessage(jid, {
+            sticker: buffer,
+            mimetype: media.mimetype || 'image/webp'
+          });
+        } else if (media && media.data) {
+          // Usar datos base64 existentes
+          const buffer = Buffer.from(media.data, 'base64');
+          sentMessage = await sock.sendMessage(jid, {
+            sticker: buffer,
+            mimetype: media.mimetype || 'image/webp'
+          });
+        } else {
+          throw new Error('URL o datos de sticker requeridos');
+        }
+        break;
+      
       default:
         throw new Error(`Tipo de mensaje no soportado: ${type}`);
     }
@@ -1694,7 +1718,7 @@ app.post('/api/send', authenticateToken, async (req, res) => {
       });
     }
 
-    const { phoneNumber, message, imageUrl, imageUrls, pdfUrl, contact, vcard } = validation.payload;
+    const { phoneNumber, message, imageUrl, imageUrls, pdfUrl, contact, vcard, stickerUrl } = validation.payload;
 
     // Declarar chatId fuera del try para que esté disponible en el catch
     let chatId;
@@ -1787,6 +1811,13 @@ app.post('/api/send', authenticateToken, async (req, res) => {
             vcard: vcard
           };
           logger.info(`Sending vCard to ${chatId}`);
+        } else if (stickerUrl) {
+          sendData.type = _MESSAGE_TYPE_STICKER;
+          sendData.media = {
+            url: stickerUrl,
+            mimetype: 'image/webp'
+          };
+          logger.info(`Sending sticker to ${chatId}`);
         } else if (message) {
           sendData.type = 'text';
           logger.info(`Sending text message to ${chatId}: ${message}`);
