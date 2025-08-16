@@ -46,38 +46,19 @@ const albumMessages = new Map(); // Almacenar mensajes de álbumes
 // Función para guardar logs de requests POST en onMessage
 async function logOnMessageRequest(requestData) {
   try {
-    const logFile = path.join('logs', 'onmessage-requests.json');
-    const maxLogs = 50;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logDir = path.join('logs', 'onmessage-requests');
     
-    // Leer logs existentes
-    let logs = [];
-    if (await fs.pathExists(logFile)) {
-      try {
-        const fileContent = await fs.readFile(logFile, 'utf8');
-        logs = JSON.parse(fileContent);
-      } catch (error) {
-        logger.warn('Error leyendo archivo de logs de onMessage, creando nuevo:', error.message);
-        logs = [];
-      }
-    }
+    // Crear directorio si no existe
+    await fs.ensureDir(logDir);
     
-    // Agregar nuevo log con timestamp
-    const newLog = {
-      timestamp: new Date().toISOString(),
-      data: requestData
-    };
+    // Crear nombre de archivo único con timestamp
+    const logFile = path.join(logDir, `request-${timestamp}.json`);
     
-    logs.push(newLog);
+    // Guardar el request completo como JSON en un archivo separado
+    await fs.writeFile(logFile, JSON.stringify(requestData, null, 2));
     
-    // Mantener solo los últimos 50 logs
-    if (logs.length > maxLogs) {
-      logs = logs.slice(-maxLogs);
-    }
-    
-    // Guardar logs actualizados
-    await fs.writeFile(logFile, JSON.stringify(logs, null, 2));
-    
-    logger.debug(`[ONMESSAGE_LOG] Request guardado en logs (total: ${logs.length})`);
+    logger.debug(`[ONMESSAGE_LOG] Request guardado en archivo: ${logFile}`);
   } catch (error) {
     logger.error('Error guardando log de request onMessage:', error.message);
   }
