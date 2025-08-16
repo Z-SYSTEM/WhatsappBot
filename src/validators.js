@@ -349,13 +349,7 @@ class Validators {
       }
     }
 
-    // Validar stickerUrl
-    if (sanitizedPayload.stickerUrl) {
-      const urlValidation = this.validateUrl(sanitizedPayload.stickerUrl);
-      if (!urlValidation.valid) {
-        errors.push(`stickerUrl: ${urlValidation.error}`);
-      }
-    }
+
 
     // Validar contact
     if (sanitizedPayload.contact) {
@@ -378,12 +372,11 @@ class Validators {
                       sanitizedPayload.imageUrl ||
                       (sanitizedPayload.imageUrls && sanitizedPayload.imageUrls.length > 0) ||
                       sanitizedPayload.pdfUrl ||
-                      sanitizedPayload.stickerUrl ||
                       sanitizedPayload.contact ||
                       sanitizedPayload.vcard;
 
     if (!hasContent) {
-      errors.push('At least one of: message, imageUrl, imageUrls, pdfUrl, stickerUrl, contact, or vcard is required');
+      errors.push('At least one of: message, imageUrl, imageUrls, pdfUrl, contact, or vcard is required');
     }
 
     if (errors.length > 0) {

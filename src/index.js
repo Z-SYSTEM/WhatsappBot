@@ -24,7 +24,7 @@ const _MESSAGE_TYPE_IMAGE = 'image';
 const _MESSAGE_TYPE_VIDEO = 'video';
 const _MESSAGE_TYPE_AUDIO = 'audio';
 const _MESSAGE_TYPE_DOCUMENT = 'document';
-const _MESSAGE_TYPE_STICKER = 'sticker';
+// const _MESSAGE_TYPE_STICKER = 'sticker'; // Soporte deshabilitado
 const _MESSAGE_TYPE_LOCATION = 'location';
 const _MESSAGE_TYPE_CONTACT = 'contact';
 const _MESSAGE_TYPE_ALBUM = 'album';
@@ -1083,117 +1083,9 @@ async function handleIncomingMessage(msg) {
         // No es un error crítico, continuar sin los datos del documento
       }
                  } else if (msg.message.stickerMessage) {
-               tempMessageData.type = _MESSAGE_TYPE_STICKER;
-               tempMessageData.hasMedia = true;
-               tempMessageData.data = {
-                 mimetype: msg.message.stickerMessage.mimetype || 'image/webp',
-                 filename: 'sticker.webp',
-                 stickerId: msg.message.stickerMessage.stickerId,
-                 packId: msg.message.stickerMessage.packId,
-                 packName: msg.message.stickerMessage.packName,
-                 packPublisher: msg.message.stickerMessage.packPublisher,
-                 isAnimated: msg.message.stickerMessage.isAnimated || false
-               };
-               
-               tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
-               
-               logger.info(`[STICKER] Sticker recibido de ${tempMessageData.phoneNumber}`);
-               logger.info(`[STICKER] StickerId: ${tempMessageData.data.stickerId}`);
-               logger.info(`[STICKER] PackId: ${tempMessageData.data.packId}`);
-               logger.info(`[STICKER] PackName: ${tempMessageData.data.packName}`);
-               logger.info(`[STICKER] IsAnimated: ${tempMessageData.data.isAnimated}`);
-               
-                               // Función para descargar sticker con reintentos
-                const downloadStickerWithRetry = async (msg, maxRetries = 3) => {
-                  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                    try {
-                      logger.info(`[STICKER] Intento ${attempt}/${maxRetries} de descarga para ${tempMessageData.phoneNumber}`);
-                      
-                      const result = await downloadMediaMessage(msg);
-                      let buffer;
-                      
-                      logger.debug(`[STICKER] Resultado de downloadMediaMessage tipo: ${typeof result}`);
-                      
-                      if (Buffer.isBuffer(result)) {
-                        buffer = result;
-                        logger.debug(`[STICKER] Resultado es Buffer, tamaño: ${buffer.length} bytes`);
-                      } else if (result && typeof result === 'object') {
-                        logger.debug(`[STICKER] Resultado es objeto, propiedades: ${Object.keys(result)}`);
-                        if (result.readable || result.pipe || result.on) {
-                          logger.debug(`[STICKER] Resultado es Stream, convirtiendo a buffer...`);
-                          const chunks = [];
-                          for await (const chunk of result) {
-                            chunks.push(chunk);
-                          }
-                          buffer = Buffer.concat(chunks);
-                          logger.debug(`[STICKER] Stream convertido a buffer, tamaño: ${buffer.length} bytes`);
-                        } else {
-                          if (result.data) {
-                            buffer = Buffer.from(result.data);
-                            logger.debug(`[STICKER] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
-                          } else if (result.buffer) {
-                            buffer = Buffer.from(result.buffer);
-                            logger.debug(`[STICKER] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
-                          } else if (result.content) {
-                            buffer = Buffer.from(result.content);
-                            logger.debug(`[STICKER] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
-                          } else {
-                            buffer = Buffer.from(JSON.stringify(result));
-                            logger.debug(`[STICKER] Objeto convertido a buffer, tamaño: ${buffer.length} bytes`);
-                          }
-                        }
-                      } else {
-                        throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
-                      }
-                      
-                      tempMessageData.data.data = buffer.toString('base64');
-                      logger.info(`[STICKER] Sticker descargado exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
-                      
-                      // Verificar que los datos se guardaron correctamente
-                      if (tempMessageData.data.data) {
-                        logger.debug(`[STICKER] Datos base64 guardados correctamente en tempMessageData.data.data`);
-                        logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data existe: ${!!tempMessageData.data.data}`);
-                        logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data longitud: ${tempMessageData.data.data.length} caracteres`);
-                        logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data completo: ${JSON.stringify(tempMessageData.data)}`);
-                        return true; // Éxito
-                      } else {
-                        logger.warn(`[STICKER] ERROR: Los datos base64 no se guardaron correctamente`);
-                        throw new Error('Datos no se guardaron correctamente');
-                      }
-                      
-                    } catch (error) {
-                      logger.error(`[STICKER] Error en intento ${attempt}/${maxRetries} para ${tempMessageData.phoneNumber}: ${error.message}`);
-                      
-                                             // Si es error de red, esperar antes del siguiente intento
-                       if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED') || 
-                           error.message.includes('timeout') || error.message.includes('getaddrinfo')) {
-                         if (attempt < maxRetries) {
-                           const delay = attempt * 2000; // 2, 4, 6 segundos
-                           logger.info(`[STICKER] Error de red detectado, esperando ${delay}ms antes del siguiente intento...`);
-                           await new Promise(resolve => setTimeout(resolve, delay));
-                           continue;
-                         }
-                       }
-                      
-                      // Si es el último intento o error no es de red, fallar
-                      if (attempt === maxRetries) {
-                        logger.error(`[STICKER] Todos los intentos fallaron para ${tempMessageData.phoneNumber}`);
-                        logger.error(`[STICKER] Stack trace: ${error.stack}`);
-                        
-                        // Agregar información del error al webhook
-                        tempMessageData.data.downloadError = {
-                          message: error.message,
-                          attempts: maxRetries,
-                          timestamp: new Date().toISOString()
-                        };
-                      }
-                      return false; // Fallo
-                    }
-                  }
-                };
-                
-                // Intentar descargar el sticker
-                await downloadStickerWithRetry(msg, 3);
+                   // Stickers no soportados - ignorar
+                   logger.debug(`[IGNORED] Sticker ignorado de ${tempMessageData.phoneNumber} - soporte deshabilitado`);
+                   return; // No procesar stickers
     } else if (msg.message.locationMessage) {
       tempMessageData.type = _MESSAGE_TYPE_LOCATION;
       tempMessageData.data = {
@@ -1281,36 +1173,17 @@ async function handleIncomingMessage(msg) {
            isForwarded: tempMessageData.isForwarded || false
          };
          
-                  // Log específico para stickers para verificar la estructura final
-         if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
-           logger.info(`[WEBHOOK] STICKER - webhookData.data: ${JSON.stringify(webhookData.data)}`);
-           logger.info(`[WEBHOOK] STICKER - webhookData.data.data existe: ${!!webhookData.data.data}`);
-           if (webhookData.data.data) {
-             logger.info(`[WEBHOOK] STICKER - webhookData.data.data longitud: ${webhookData.data.data.length} caracteres`);
-           }
-         }
+         
         
         // Log para verificar que los datos de media se incluyen correctamente
         if (tempMessageData.hasMedia && tempMessageData.data && tempMessageData.data.data) {
           logger.debug(`[WEBHOOK] Datos de media incluidos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}, tamaño base64: ${tempMessageData.data.data.length} caracteres`);
           
-          // Log específico para stickers con datos
-          if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
-            logger.info(`[WEBHOOK] STICKER CON DATOS: ${tempMessageData.phoneNumber}`);
-            logger.info(`[WEBHOOK] STICKER - tamaño base64: ${tempMessageData.data.data.length} caracteres`);
-            logger.info(`[WEBHOOK] STICKER - primeros 100 caracteres: ${tempMessageData.data.data.substring(0, 100)}...`);
-          }
+
         } else if (tempMessageData.hasMedia) {
           logger.warn(`[WEBHOOK] Media marcado como true pero no hay datos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}`);
           
-          // Log específico para stickers
-          if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
-            logger.warn(`[WEBHOOK] STICKER SIN DATOS: ${tempMessageData.phoneNumber}`);
-            logger.warn(`[WEBHOOK] STICKER - hasMedia: ${tempMessageData.hasMedia}`);
-            logger.warn(`[WEBHOOK] STICKER - data existe: ${!!tempMessageData.data}`);
-            logger.warn(`[WEBHOOK] STICKER - data.data existe: ${!!tempMessageData.data.data}`);
-            logger.warn(`[WEBHOOK] STICKER - data completo: ${JSON.stringify(tempMessageData.data)}`);
-          }
+
         }
         
         // Verificar que los datos se pueden serializar correctamente
@@ -1334,10 +1207,7 @@ async function handleIncomingMessage(msg) {
         // Enviar webhook para todos los tipos de mensaje
         await logOnMessageRequest(webhookData);
         
-        // Log específico para stickers del webhook completo
-        if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
-          logger.info(`[WEBHOOK] STICKER - Enviando webhook completo: ${JSON.stringify(webhookData, null, 2)}`);
-        }
+
         
         await axios.post(ONMESSAGE, webhookData, axiosConfig);
         
@@ -1388,39 +1258,7 @@ async function handleCall(json) {
   }
 }
 
-// Función para verificar conectividad de red
-async function checkNetworkConnectivity() {
-  try {
-    // Verificar DNS con dominios reales de WhatsApp
-    const dns = require('dns').promises;
-    const whatsappDomains = [
-      'mmg.whatsapp.net',
-      'media.fada1-1.fna.whatsapp.net',
-      'media.fada1-2.fna.whatsapp.net'
-    ];
-    
-    for (const domain of whatsappDomains) {
-      try {
-        await dns.lookup(domain);
-        logger.info(`[NETWORK] DNS de WhatsApp resuelto correctamente: ${domain}`);
-        return true;
-      } catch (domainError) {
-        logger.debug(`[NETWORK] No se puede resolver ${domain}: ${domainError.message}`);
-      }
-    }
-    
-    logger.warn('[NETWORK] No se pudo resolver ningún dominio de WhatsApp');
-    return false;
-  } catch (error) {
-    logger.error('[NETWORK] Error de conectividad detectado:', error.message);
-    logger.error('[NETWORK] Esto puede deberse a:');
-    logger.error('[NETWORK] 1. Problemas de DNS');
-    logger.error('[NETWORK] 2. Firewall bloqueando WhatsApp');
-    logger.error('[NETWORK] 3. Red corporativa con restricciones');
-    logger.error('[NETWORK] 4. Problemas de conectividad de internet');
-    return false;
-  }
-}
+
 
 // Función para descargar archivo desde URL
 async function downloadFromUrl(url, mimetype = 'image/jpeg') {
@@ -1638,25 +1476,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
-      case _MESSAGE_TYPE_STICKER:
-        if (media && media.url) {
-          // Descargar sticker desde URL
-          const buffer = await downloadFromUrl(media.url, media.mimetype);
-          sentMessage = await sock.sendMessage(jid, {
-            sticker: buffer,
-            mimetype: media.mimetype || 'image/webp'
-          });
-        } else if (media && media.data) {
-          // Usar datos base64 existentes
-          const buffer = Buffer.from(media.data, 'base64');
-          sentMessage = await sock.sendMessage(jid, {
-            sticker: buffer,
-            mimetype: media.mimetype || 'image/webp'
-          });
-        } else {
-          throw new Error('URL o datos de sticker requeridos');
-        }
-        break;
+
       
       default:
         throw new Error(`Tipo de mensaje no soportado: ${type}`);
@@ -1846,7 +1666,7 @@ app.post('/api/send', authenticateToken, async (req, res) => {
       });
     }
 
-    const { phoneNumber, message, imageUrl, imageUrls, pdfUrl, contact, vcard, stickerUrl } = validation.payload;
+            const { phoneNumber, message, imageUrl, imageUrls, pdfUrl, contact, vcard } = validation.payload;
 
     // Declarar chatId fuera del try para que esté disponible en el catch
     let chatId;
@@ -1939,13 +1759,7 @@ app.post('/api/send', authenticateToken, async (req, res) => {
             vcard: vcard
           };
           logger.info(`Sending vCard to ${chatId}`);
-        } else if (stickerUrl) {
-          sendData.type = _MESSAGE_TYPE_STICKER;
-          sendData.media = {
-            url: stickerUrl,
-            mimetype: 'image/webp'
-          };
-          logger.info(`Sending sticker to ${chatId}`);
+
         } else if (message) {
           sendData.type = 'text';
           logger.info(`Sending text message to ${chatId}: ${message}`);
@@ -2237,13 +2051,7 @@ async function startServer() {
   });
 }
 
-// Verificar conectividad de red al inicio
-checkNetworkConnectivity().then(isConnected => {
-  if (!isConnected) {
-    logger.warn('[NETWORK] Se detectaron problemas de conectividad. Los stickers pueden no descargarse correctamente.');
-    logger.warn('[NETWORK] Se implementarán reintentos automáticos para la descarga de stickers.');
-  }
-});
+
 
 // Iniciar la aplicación
 startServer();
