@@ -13,6 +13,9 @@ const Validators = require('./validators');
 const RateLimiter = require('./rate-limiter');
 require('dotenv').config();
 
+// Set para trackear mensajes ya procesados y evitar duplicados
+const processedMessageIds = new Set();
+
 // Función para guardar logs de requests POST en onMessage
 async function logOnMessageRequest(requestData) {
   try {
@@ -621,6 +624,23 @@ function isMessageForwarded(messageObj) {
 // Función para manejar mensajes entrantes
 async function handleIncomingMessage(msg) {
   try {
+    // Verificar si el mensaje ya fue procesado
+    if (processedMessageIds.has(msg.key.id)) {
+      logger.debug(`[DUPLICATE] Mensaje ya procesado, ignorando: ${msg.key.id}`);
+      return;
+    }
+    
+    // Agregar el ID a la lista de procesados
+    processedMessageIds.add(msg.key.id);
+    
+    // Limpiar IDs antiguos (mantener solo los últimos 1000)
+    if (processedMessageIds.size > 1000) {
+      const idsArray = Array.from(processedMessageIds);
+      processedMessageIds.clear();
+      // Mantener solo los últimos 500 IDs
+      idsArray.slice(-500).forEach(id => processedMessageIds.add(id));
+    }
+
     // Reutilizar objeto para evitar allocations
     tempMessageData.phoneNumber = msg.key.remoteJid.replace('@c.us', '').replace('@s.whatsapp.net', '');
     tempMessageData.type = 'chat';
