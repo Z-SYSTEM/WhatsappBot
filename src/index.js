@@ -1355,6 +1355,31 @@ async function sendMessage({ phone, message, type = 'text', media }) {
             caption: message,
             mimetype: media.mimetype || 'image/jpeg'
           });
+          
+          // Crear JSON con caption y link para el body
+          const imageBody = JSON.stringify({
+            caption: message || '',
+            imageUrl: media.url
+          });
+          
+          // Enviar webhook con el nuevo formato
+          if (ONMESSAGE) {
+            const webhookData = {
+              phoneNumber: jid.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+              type: _MESSAGE_TYPE_IMAGE,
+              from: jid,
+              id: sentMessage.key?.id || `img_${Date.now()}`,
+              timestamp: Math.floor(Date.now() / 1000),
+              body: imageBody,
+              hasMedia: true,
+              data: {},
+              isForwarded: false
+            };
+            
+            await axios.post(ONMESSAGE, webhookData, axiosConfig);
+            logger.info(`[WEBHOOK] Imagen enviada con nuevo formato: ${webhookData.phoneNumber}`);
+          }
+          
         } else if (media && media.data) {
           // Usar datos base64 existentes
           const buffer = Buffer.from(media.data, 'base64');
@@ -1363,6 +1388,31 @@ async function sendMessage({ phone, message, type = 'text', media }) {
             caption: message,
             mimetype: media.mimetype || 'image/jpeg'
           });
+          
+          // Crear JSON con caption para el body (sin URL ya que es base64)
+          const imageBody = JSON.stringify({
+            caption: message || '',
+            imageData: 'base64_data'
+          });
+          
+          // Enviar webhook con el nuevo formato
+          if (ONMESSAGE) {
+            const webhookData = {
+              phoneNumber: jid.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+              type: _MESSAGE_TYPE_IMAGE,
+              from: jid,
+              id: sentMessage.key?.id || `img_${Date.now()}`,
+              timestamp: Math.floor(Date.now() / 1000),
+              body: imageBody,
+              hasMedia: true,
+              data: {},
+              isForwarded: false
+            };
+            
+            await axios.post(ONMESSAGE, webhookData, axiosConfig);
+            logger.info(`[WEBHOOK] Imagen base64 enviada con nuevo formato: ${webhookData.phoneNumber}`);
+          }
+          
         } else {
           throw new Error('URL o datos de imagen requeridos');
         }
