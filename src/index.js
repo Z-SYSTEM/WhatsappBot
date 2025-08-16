@@ -152,8 +152,8 @@ const healthChecker = new HealthChecker({
 // Inicializar sistemas de seguridad
 const rateLimiter = new RateLimiter({
   windowMs: 60 * 1000, // 1 minuto fijo
-  maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 200, // 200 requests por minuto
-  blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION_MS) || 60 * 60 * 1000 // 1 hora de bloqueo
+  maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 300, // 300 requests por minuto (más permisivo)
+  blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION_MS) || 15 * 60 * 1000 // 15 minutos de bloqueo (menos severo)
 });
 
 // Middleware de autenticación
@@ -544,13 +544,17 @@ async function connectToWhatsApp() {
           !msg.key.remoteJid.includes('@broadcast')) {
         await handleIncomingMessage(msg);
       } else if (msg.key.fromMe) {
-        logger.info(`[IGNORED] Mensaje propio ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
+        // Solo loggear mensajes propios que no sean protocolMessage (mensajes internos de WhatsApp)
+        const messageTypes = Object.keys(msg.message || {});
+        if (!messageTypes.includes('protocolMessage')) {
+          logger.debug(`[IGNORED] Mensaje propio ignorado: ${msg.key.remoteJid} - ${messageTypes.join(', ')}`);
+        }
       } else if (msg.key.remoteJid.includes('@g.us')) {
-        logger.info(`[IGNORED] Mensaje de grupo ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
+        logger.debug(`[IGNORED] Mensaje de grupo ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
       } else if (msg.key.remoteJid.includes('@broadcast')) {
-        logger.info(`[IGNORED] Mensaje de status ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
+        logger.debug(`[IGNORED] Mensaje de status ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
       } else if (!msg.message) {
-        logger.warn(`[IGNORED] Mensaje sin contenido ignorado: ${msg.key.remoteJid}`);
+        logger.debug(`[IGNORED] Mensaje sin contenido ignorado: ${msg.key.remoteJid}`);
       } else {
         logger.warn(`[IGNORED] Mensaje de tipo desconocido ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message).join(', ')}`);
       }
@@ -1006,6 +1010,15 @@ app.get('/api/test', authenticateToken, (req, res) => {
     is_connecting: botStatus.isConnecting,
     restart_attempts: botStatus.restartAttempts,
     last_health_check: botStatus.lastHealthCheck,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoint para ver estadísticas del rate limiter
+app.get('/api/rate-limit-stats', authenticateToken, (req, res) => {
+  const stats = rateLimiter.getStats();
+  res.json({
+    rate_limit_stats: stats,
     timestamp: new Date().toISOString()
   });
 });

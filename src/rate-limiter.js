@@ -16,6 +16,7 @@ class RateLimiter {
 
     if (Date.now() > blocked.blockedUntil) {
       this.blockedIPs.delete(ip);
+      logger.info(`[RATE_LIMIT] IP ${ip} unblocked - block period expired`);
       return false;
     }
 
@@ -80,6 +81,7 @@ class RateLimiter {
 
     // Verificar si excede el límite
     if (newCount > this.maxRequests) {
+      logger.warn(`[RATE_LIMIT] IP ${ip} exceeded limit: ${newCount}/${this.maxRequests} requests`);
       this.blockIP(ip);
       return {
         allowed: false,
@@ -99,11 +101,14 @@ class RateLimiter {
   // Limpiar datos expirados
   cleanup() {
     const now = Date.now();
+    let cleanedRequests = 0;
+    let cleanedBlocks = 0;
     
     // Limpiar requests expirados
     for (const [ip, data] of this.requests.entries()) {
       if (now > data.resetTime) {
         this.requests.delete(ip);
+        cleanedRequests++;
       }
     }
 
@@ -111,7 +116,13 @@ class RateLimiter {
     for (const [ip, blocked] of this.blockedIPs.entries()) {
       if (now > blocked.blockedUntil) {
         this.blockedIPs.delete(ip);
+        cleanedBlocks++;
       }
+    }
+
+    // Log de estadísticas periódicas
+    if (this.requests.size > 0 || this.blockedIPs.size > 0) {
+      logger.info(`[RATE_LIMIT_STATS] Active requests: ${this.requests.size}, Blocked IPs: ${this.blockedIPs.size}, Cleaned: ${cleanedRequests} requests, ${cleanedBlocks} blocks`);
     }
   }
 
@@ -126,15 +137,30 @@ class RateLimiter {
     };
   }
 
+  // Convertir IP IPv6 a IPv4 si es posible
+  normalizeIP(ip) {
+    // Si es una IP IPv4 mapeada a IPv6 (::ffff:xxx.xxx.xxx.xxx)
+    if (ip.startsWith('::ffff:')) {
+      return ip.substring(7); // Remover el prefijo ::ffff:
+    }
+    return ip;
+  }
+
   // Middleware para Express
   middleware() {
     return (req, res, next) => {
-      const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket?.remoteAddress;
+      let ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket?.remoteAddress;
       
       if (!ip) {
         logger.warn('Could not determine client IP address');
         return next();
       }
+
+      // Normalizar IP para mejor legibilidad
+      ip = this.normalizeIP(ip);
+
+      // Log del request
+      logger.info(`[REQUEST] ${req.method} ${req.path} from IP ${ip}`);
 
       const result = this.checkRateLimit(ip);
 
@@ -148,6 +174,9 @@ class RateLimiter {
           });
         }
       }
+
+      // Log del rate limit status
+      logger.debug(`[RATE_LIMIT] IP ${ip}: ${result.remaining} requests remaining, resets at ${new Date(result.resetTime).toISOString()}`);
 
       // Agregar headers de rate limit
       res.set({
