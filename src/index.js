@@ -13,8 +13,35 @@ const Validators = require('./validators');
 const RateLimiter = require('./rate-limiter');
 require('dotenv').config();
 
+// Constantes para tipos de mensajes de WhatsApp
+const _PROTOCOL_MESSAGE_ALBUM = 14;
+const _PROTOCOL_MESSAGE_REVOKE = 7;
+const _PROTOCOL_MESSAGE_EPHEMERAL_SETTING = 18;
+
+// Constantes para tipos de mensajes
+const _MESSAGE_TYPE_CHAT = 'chat';
+const _MESSAGE_TYPE_IMAGE = 'image';
+const _MESSAGE_TYPE_VIDEO = 'video';
+const _MESSAGE_TYPE_AUDIO = 'audio';
+const _MESSAGE_TYPE_DOCUMENT = 'document';
+const _MESSAGE_TYPE_STICKER = 'sticker';
+const _MESSAGE_TYPE_LOCATION = 'location';
+const _MESSAGE_TYPE_CONTACT = 'contact';
+const _MESSAGE_TYPE_ALBUM = 'album';
+const _MESSAGE_TYPE_CALL = 'call';
+
+// Constantes para timeouts y límites
+const _ALBUM_WAIT_TIMEOUT = 10000; // 10 segundos para esperar mensajes de álbum
+const _ALBUM_MAX_IMAGES = 30; // Máximo número de imágenes en un álbum
+const _PROCESSED_MESSAGES_MAX_SIZE = 1000;
+const _PROCESSED_MESSAGES_KEEP_SIZE = 500;
+
 // Set para trackear mensajes ya procesados y evitar duplicados
 const processedMessageIds = new Set();
+
+// Sistema para manejar álbumes
+const albumTracker = new Map(); // Trackear álbumes en progreso
+const albumMessages = new Map(); // Almacenar mensajes de álbumes
 
 // Función para guardar logs de requests POST en onMessage
 async function logOnMessageRequest(requestData) {
@@ -621,6 +648,104 @@ function isMessageForwarded(messageObj) {
   return messageObj && messageObj.contextInfo && messageObj.contextInfo.isForwarded;
 }
 
+// Función para generar ID único de álbum
+function generateAlbumId(msg) {
+  const remoteJid = msg.key.remoteJid;
+  const timestamp = msg.messageTimestamp;
+  return `${remoteJid}_${timestamp}`;
+}
+
+// Función para verificar si un mensaje pertenece a un álbum
+function isAlbumMessage(msg) {
+  // Verificar si es una imagen con contexto de álbum
+  if (msg.message && msg.message.imageMessage && msg.message.imageMessage.contextInfo) {
+    const contextInfo = msg.message.imageMessage.contextInfo;
+    
+    // Un mensaje es parte de un álbum si:
+    // 1. Tiene contextInfo
+    // 2. No es reenviado
+    // 3. Tiene productId (indicador de álbum)
+    // 4. O tiene businessOwnerJid (indicador de álbum de negocio)
+    return contextInfo.isForwarded === false && 
+           (contextInfo.productId || contextInfo.businessOwnerJid);
+  }
+  
+  return false;
+}
+
+// Función para procesar álbum completo
+async function processAlbum(albumId) {
+  try {
+    const albumData = albumMessages.get(albumId);
+    if (!albumData) {
+      logger.warn(`[ALBUM] No se encontraron datos para álbum: ${albumId}`);
+      return;
+    }
+
+    const { messages, caption, from, timestamp } = albumData;
+    logger.info(`[ALBUM] Procesando álbum con ${messages.length} imágenes de ${from}`);
+
+    // Procesar cada imagen del álbum individualmente
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const imageCaption = (i === 0 && caption) ? caption : ''; // Solo caption en la primera imagen
+      
+      // Crear un mensaje individual para cada imagen
+      const individualMsg = {
+        ...msg,
+        message: {
+          imageMessage: {
+            ...msg.message.imageMessage,
+            caption: imageCaption
+          }
+        }
+      };
+
+      // Procesar la imagen individual
+      await processIndividualImage(individualMsg, i + 1, messages.length);
+    }
+
+    // Limpiar datos del álbum
+    albumMessages.delete(albumId);
+    albumTracker.delete(albumId);
+    
+    logger.info(`[ALBUM] Álbum procesado completamente: ${albumId}`);
+  } catch (error) {
+    logger.error(`[ALBUM] Error procesando álbum ${albumId}:`, error.message);
+    // Limpiar datos en caso de error
+    albumMessages.delete(albumId);
+    albumTracker.delete(albumId);
+  }
+}
+
+// Función para procesar imagen individual de un álbum
+async function processIndividualImage(msg, imageIndex, totalImages) {
+  try {
+    // Verificar si el mensaje ya fue procesado
+    if (processedMessageIds.has(msg.key.id)) {
+      logger.debug(`[ALBUM_IMAGE] Imagen ${imageIndex}/${totalImages} ya procesada: ${msg.key.id}`);
+      return;
+    }
+    
+    // Agregar el ID a la lista de procesados
+    processedMessageIds.add(msg.key.id);
+    
+    // Limpiar IDs antiguos
+    if (processedMessageIds.size > _PROCESSED_MESSAGES_MAX_SIZE) {
+      const idsArray = Array.from(processedMessageIds);
+      processedMessageIds.clear();
+      idsArray.slice(-_PROCESSED_MESSAGES_KEEP_SIZE).forEach(id => processedMessageIds.add(id));
+    }
+
+    // Procesar la imagen como un mensaje normal
+    await handleIncomingMessage(msg);
+    
+    logger.debug(`[ALBUM_IMAGE] Imagen ${imageIndex}/${totalImages} procesada exitosamente`);
+  } catch (error) {
+    logger.error(`[ALBUM_IMAGE] Error procesando imagen ${imageIndex}/${totalImages}:`, error.message);
+  }
+}
+
 // Función para manejar mensajes entrantes
 async function handleIncomingMessage(msg) {
   try {
@@ -633,17 +758,16 @@ async function handleIncomingMessage(msg) {
     // Agregar el ID a la lista de procesados
     processedMessageIds.add(msg.key.id);
     
-    // Limpiar IDs antiguos (mantener solo los últimos 1000)
-    if (processedMessageIds.size > 1000) {
+    // Limpiar IDs antiguos
+    if (processedMessageIds.size > _PROCESSED_MESSAGES_MAX_SIZE) {
       const idsArray = Array.from(processedMessageIds);
       processedMessageIds.clear();
-      // Mantener solo los últimos 500 IDs
-      idsArray.slice(-500).forEach(id => processedMessageIds.add(id));
+      idsArray.slice(-_PROCESSED_MESSAGES_KEEP_SIZE).forEach(id => processedMessageIds.add(id));
     }
 
     // Reutilizar objeto para evitar allocations
     tempMessageData.phoneNumber = msg.key.remoteJid.replace('@c.us', '').replace('@s.whatsapp.net', '');
-    tempMessageData.type = 'chat';
+    tempMessageData.type = _MESSAGE_TYPE_CHAT;
     tempMessageData.from = msg.key.remoteJid;
     tempMessageData.id = msg.key.id;
     tempMessageData.timestamp = msg.messageTimestamp;
@@ -652,16 +776,59 @@ async function handleIncomingMessage(msg) {
     tempMessageData.data = {};
     tempMessageData.isForwarded = false;
 
+    // Verificar si es parte de un álbum
+    if (isAlbumMessage(msg)) {
+      const albumId = generateAlbumId(msg);
+      logger.debug(`[ALBUM] Mensaje de imagen pertenece a álbum: ${albumId}`);
+      
+      // Agregar mensaje al álbum
+      if (!albumMessages.has(albumId)) {
+        albumMessages.set(albumId, {
+          messages: [],
+          caption: msg.message.imageMessage.caption || '',
+          from: msg.key.remoteJid,
+          timestamp: msg.messageTimestamp
+        });
+      }
+      
+      const albumData = albumMessages.get(albumId);
+      albumData.messages.push(msg);
+      
+      logger.debug(`[ALBUM] Álbum ${albumId}: ${albumData.messages.length} imágenes recibidas`);
+      
+      // Si ya tenemos suficientes mensajes, procesar el álbum inmediatamente
+      if (albumData.messages.length >= _ALBUM_MAX_IMAGES) {
+        logger.info(`[ALBUM] Máximo de imágenes alcanzado, procesando álbum: ${albumId}`);
+        // Cancelar timeout si existe
+        if (albumTracker.has(albumId)) {
+          clearTimeout(albumTracker.get(albumId));
+          albumTracker.delete(albumId);
+        }
+        await processAlbum(albumId);
+      } else {
+        // Programar procesamiento del álbum después de un timeout
+        if (!albumTracker.has(albumId)) {
+          const timeoutId = setTimeout(() => {
+            logger.info(`[ALBUM] Timeout alcanzado, procesando álbum: ${albumId}`);
+            processAlbum(albumId);
+          }, _ALBUM_WAIT_TIMEOUT);
+          albumTracker.set(albumId, timeoutId);
+        }
+      }
+      
+      return; // No procesar individualmente, esperar a procesar el álbum completo
+    }
+
     // Extraer texto del mensaje
     if (msg.message.conversation) {
       tempMessageData.body = msg.message.conversation;
-      tempMessageData.type = 'chat';
+      tempMessageData.type = _MESSAGE_TYPE_CHAT;
     } else if (msg.message.extendedTextMessage) {
       tempMessageData.body = msg.message.extendedTextMessage.text;
-      tempMessageData.type = 'chat';
+      tempMessageData.type = _MESSAGE_TYPE_CHAT;
       tempMessageData.isForwarded = isMessageForwarded(msg.message.extendedTextMessage);
     } else if (msg.message.imageMessage) {
-      tempMessageData.type = 'image';
+      tempMessageData.type = _MESSAGE_TYPE_IMAGE;
       tempMessageData.hasMedia = true;
       tempMessageData.body = msg.message.imageMessage.caption || '';
       tempMessageData.data = {
@@ -738,7 +905,7 @@ async function handleIncomingMessage(msg) {
         // No es un error crítico, continuar sin los datos de la imagen
       }
     } else if (msg.message.videoMessage) {
-      tempMessageData.type = 'video';
+      tempMessageData.type = _MESSAGE_TYPE_VIDEO;
       tempMessageData.hasMedia = true;
       tempMessageData.body = msg.message.videoMessage.caption || '';
       tempMessageData.data = {
@@ -784,7 +951,7 @@ async function handleIncomingMessage(msg) {
         // No es un error crítico, continuar sin los datos del video
       }
     } else if (msg.message.audioMessage) {
-      tempMessageData.type = 'audio';
+      tempMessageData.type = _MESSAGE_TYPE_AUDIO;
       tempMessageData.hasMedia = true;
       tempMessageData.data = {
         mimetype: msg.message.audioMessage.mimetype,
@@ -829,7 +996,7 @@ async function handleIncomingMessage(msg) {
         // No es un error crítico, continuar sin los datos del audio
       }
     } else if (msg.message.documentMessage) {
-      tempMessageData.type = 'document';
+      tempMessageData.type = _MESSAGE_TYPE_DOCUMENT;
       tempMessageData.hasMedia = true;
       tempMessageData.body = msg.message.documentMessage.title || '';
       tempMessageData.data = {
@@ -875,7 +1042,7 @@ async function handleIncomingMessage(msg) {
         // No es un error crítico, continuar sin los datos del documento
       }
     } else if (msg.message.stickerMessage) {
-      tempMessageData.type = 'sticker';
+      tempMessageData.type = _MESSAGE_TYPE_STICKER;
       tempMessageData.hasMedia = true;
       tempMessageData.data = {
         mimetype: msg.message.stickerMessage.mimetype,
@@ -920,7 +1087,7 @@ async function handleIncomingMessage(msg) {
         // No es un error crítico, continuar sin los datos del sticker
       }
     } else if (msg.message.locationMessage) {
-      tempMessageData.type = 'location';
+      tempMessageData.type = _MESSAGE_TYPE_LOCATION;
       tempMessageData.data = {
         latitude: msg.message.locationMessage.degreesLatitude,
         longitude: msg.message.locationMessage.degreesLongitude,
@@ -929,7 +1096,7 @@ async function handleIncomingMessage(msg) {
       
       tempMessageData.isForwarded = isMessageForwarded(msg.message.locationMessage);
     } else if (msg.message.contactMessage) {
-      tempMessageData.type = 'contact';
+      tempMessageData.type = _MESSAGE_TYPE_CONTACT;
       tempMessageData.data = {
         vcard: msg.message.contactMessage.vcard
       };
@@ -937,16 +1104,16 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.contactMessage);
     } else if (msg.message.protocolMessage) {
       // Manejar mensajes de protocolo (álbumes, reacciones, etc.)
-      if (msg.message.protocolMessage.type === 14) { // Tipo 14 es para álbumes
-        tempMessageData.type = 'album';
-        tempMessageData.body = '';
-        tempMessageData.hasMedia = true;
-        tempMessageData.data = {
-          media: [],
-          caption: ''
-        };
-        
-        tempMessageData.isForwarded = isMessageForwarded(msg.message.protocolMessage);
+      if (msg.message.protocolMessage.type === _PROTOCOL_MESSAGE_ALBUM) {
+        // Los álbumes se manejan de forma especial, no procesar aquí
+        logger.debug(`[PROTOCOL] Mensaje de protocolo de álbum recibido de ${tempMessageData.phoneNumber}`);
+        return; // No procesar, esperar a que lleguen las imágenes individuales
+      } else if (msg.message.protocolMessage.type === _PROTOCOL_MESSAGE_REVOKE) {
+        logger.debug(`[PROTOCOL] Mensaje revocado de ${tempMessageData.phoneNumber}`);
+        return; // No procesar mensajes revocados
+      } else if (msg.message.protocolMessage.type === _PROTOCOL_MESSAGE_EPHEMERAL_SETTING) {
+        logger.debug(`[PROTOCOL] Configuración de mensaje efímero de ${tempMessageData.phoneNumber}`);
+        return; // No procesar configuraciones
       } else {
         // Otros tipos de protocolMessage no soportados
         logger.debug(`[IGNORED] ProtocolMessage tipo ${msg.message.protocolMessage.type} ignorado de ${tempMessageData.phoneNumber}`);
@@ -1031,29 +1198,9 @@ async function handleIncomingMessage(msg) {
           }
         };
         
-        // Manejar álbumes de manera especial
-        if (tempMessageData.type === 'album') {
-          // Para álbumes, enviar múltiples mensajes
-          // Por ahora, enviar un mensaje con información del álbum
-          const albumData = {
-            ...webhookData,
-            type: 'album',
-            media: tempMessageData.data.media || [],
-            caption: tempMessageData.data.caption || ''
-          };
-          
-          // Guardar log del request
-          await logOnMessageRequest(albumData);
-          
-          await axios.post(ONMESSAGE, albumData, axiosConfig);
-        } else {
-          // Para otros tipos de mensaje, enviar normalmente
-          
-          // Guardar log del request
-          await logOnMessageRequest(webhookData);
-          
-          await axios.post(ONMESSAGE, webhookData, axiosConfig);
-        }
+        // Enviar webhook para todos los tipos de mensaje
+        await logOnMessageRequest(webhookData);
+        await axios.post(ONMESSAGE, webhookData, axiosConfig);
         
         logger.debug(`[WEBHOOK] Webhook enviado exitosamente para ${tempMessageData.phoneNumber}`);
       } catch (error) {
@@ -1074,7 +1221,7 @@ async function handleCall(json) {
   try {
     // Reutilizar objeto para evitar allocations
     tempMessageData.phoneNumber = json[0].id.replace('@c.us', '').replace('@s.whatsapp.net', '');
-    tempMessageData.type = 'call';
+    tempMessageData.type = _MESSAGE_TYPE_CALL;
     tempMessageData.from = json[0].id;
     tempMessageData.id = `call_${Date.now()}`;
     tempMessageData.timestamp = Math.floor(Date.now() / 1000);
@@ -1139,7 +1286,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         sentMessage = await sock.sendMessage(jid, { text: message });
         break;
       
-      case 'image':
+      case _MESSAGE_TYPE_IMAGE:
         if (media && media.url) {
           // Descargar imagen desde URL
           const buffer = await downloadFromUrl(media.url, media.mimetype);
@@ -1161,7 +1308,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
-      case 'video':
+      case _MESSAGE_TYPE_VIDEO:
         if (media && media.url) {
           // Descargar video desde URL
           const buffer = await downloadFromUrl(media.url, media.mimetype);
@@ -1183,7 +1330,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
-      case 'audio':
+      case _MESSAGE_TYPE_AUDIO:
         if (media && media.url) {
           // Descargar audio desde URL
           const buffer = await downloadFromUrl(media.url, media.mimetype);
@@ -1205,7 +1352,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
-      case 'document':
+      case _MESSAGE_TYPE_DOCUMENT:
         if (media && media.url) {
           // Descargar documento desde URL
           const buffer = await downloadFromUrl(media.url, media.mimetype);
@@ -1227,7 +1374,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
-      case 'location':
+      case _MESSAGE_TYPE_LOCATION:
         if (media && media.latitude && media.longitude) {
           sentMessage = await sock.sendMessage(jid, {
             location: {
@@ -1241,7 +1388,7 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         }
         break;
       
-      case 'contact':
+      case _MESSAGE_TYPE_CONTACT:
         if (media && media.contact) {
           // Enviar contacto usando objeto contact
           sentMessage = await sock.sendMessage(jid, {
@@ -1336,6 +1483,33 @@ async function healthCheck() {
 
 // Configurar cron job para health check - Reducido a cada 5 minutos para reducir ruido
 cron.schedule(`0 */5 * * * *`, healthCheck);
+
+// Función para limpiar álbumes expirados
+function cleanupExpiredAlbums() {
+  try {
+    const now = Date.now();
+    let cleanedCount = 0;
+    
+    for (const [albumId, timeout] of albumTracker.entries()) {
+      // Si han pasado más de 30 segundos, limpiar el álbum
+      if (now - timeout > 30000) {
+        logger.debug(`[ALBUM_CLEANUP] Limpiando álbum expirado: ${albumId}`);
+        albumTracker.delete(albumId);
+        albumMessages.delete(albumId);
+        cleanedCount++;
+      }
+    }
+    
+    if (cleanedCount > 0) {
+      logger.info(`[ALBUM_CLEANUP] Limpiados ${cleanedCount} álbumes expirados`);
+    }
+  } catch (error) {
+    logger.error('[ALBUM_CLEANUP] Error limpiando álbumes expirados:', error.message);
+  }
+}
+
+// Configurar limpieza de álbumes cada 2 minutos
+cron.schedule(`0 */2 * * * *`, cleanupExpiredAlbums);
 
 // Configurar Express
 const app = express();
@@ -1451,7 +1625,7 @@ app.post('/api/send', authenticateToken, async (req, res) => {
 
         // Determinar tipo de contenido y preparar datos
         if (pdfUrl) {
-          sendData.type = 'document';
+          sendData.type = _MESSAGE_TYPE_DOCUMENT;
           sendData.media = {
             url: pdfUrl,
             mimetype: 'application/pdf',
@@ -1468,7 +1642,7 @@ app.post('/api/send', authenticateToken, async (req, res) => {
               const imageData = {
                 phone: chatId,
                 message: (i === 0 && message) ? message : '', // Solo caption en la primera imagen
-                type: 'image',
+                type: _MESSAGE_TYPE_IMAGE,
                 media: {
                   url: imageUrls[i],
                   mimetype: 'image/jpeg'
@@ -1498,20 +1672,20 @@ app.post('/api/send', authenticateToken, async (req, res) => {
           return res.json({ status: true, imagesSent: successCount, totalImages: imageUrls.length });
           
         } else if (imageUrl) {
-          sendData.type = 'image';
+          sendData.type = _MESSAGE_TYPE_IMAGE;
           sendData.media = {
             url: imageUrl,
             mimetype: 'image/jpeg'
           };
           logger.info(`Sending single image to ${chatId}`);
         } else if (contact) {
-          sendData.type = 'contact';
+          sendData.type = _MESSAGE_TYPE_CONTACT;
           sendData.media = {
             contact: contact
           };
           logger.info(`Sending contact to ${chatId}: ${contact.name}`);
         } else if (vcard) {
-          sendData.type = 'contact';
+          sendData.type = _MESSAGE_TYPE_CONTACT;
           sendData.media = {
             vcard: vcard
           };
