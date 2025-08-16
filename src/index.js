@@ -891,27 +891,79 @@ async function handleIncomingMessage(msg) {
       tempMessageData.type = _MESSAGE_TYPE_IMAGE;
       tempMessageData.hasMedia = true;
       tempMessageData.body = msg.message.imageMessage.caption || '';
-      
-      // Crear URL de WhatsApp para la imagen
-      const imageUrl = `https://wa.me/${msg.key.id}`;
-      
       tempMessageData.data = {
         mimetype: msg.message.imageMessage.mimetype,
-        filename: msg.message.imageMessage.fileName || 'image.jpg',
-        url: imageUrl
+        filename: msg.message.imageMessage.fileName || 'image.jpg'
       };
       
       tempMessageData.isForwarded = isMessageForwarded(msg.message.imageMessage);
       
-      // Crear JSON con caption y URL para el body (similar a álbumes)
-      tempMessageData.body = JSON.stringify({
-        caption: msg.message.imageMessage.caption || '',
-        imageUrl: imageUrl,
-        mimetype: msg.message.imageMessage.mimetype || 'image/jpeg',
-        filename: msg.message.imageMessage.fileName || 'image.jpg'
-      });
+      // Descargar imagen
+      logger.debug(`[DOWNLOAD] Preparando descarga de imagen para ${tempMessageData.phoneNumber}`);
+      logger.debug(`[DOWNLOAD] Mensaje completo: ${JSON.stringify(msg, null, 2)}`);
       
-      logger.debug(`[IMAGE] Imagen individual procesada con URL: ${imageUrl} para ${tempMessageData.phoneNumber}`);
+      try {
+        logger.debug(`[DOWNLOAD] Iniciando descarga de imagen para ${tempMessageData.phoneNumber}`);
+        logger.debug(`[DOWNLOAD] downloadMediaMessage disponible: ${typeof downloadMediaMessage}`);
+        
+        const result = await downloadMediaMessage(msg);
+        logger.debug(`[DOWNLOAD] Resultado obtenido, tipo: ${typeof result}, constructor: ${result.constructor.name}`);
+        
+        // Verificar si el resultado es un buffer, stream o un objeto
+        let buffer;
+        if (Buffer.isBuffer(result)) {
+          buffer = result;
+          logger.debug(`[DOWNLOAD] Resultado es un Buffer, tamaño: ${buffer.length} bytes`);
+        } else if (result && typeof result === 'object') {
+          // Si es un objeto, verificar si es un stream
+          if (result.readable || result.pipe || result.on) {
+            logger.debug(`[DOWNLOAD] Resultado es un Stream, convirtiendo a buffer...`);
+            // Es un stream, convertirlo a buffer
+            const chunks = [];
+            for await (const chunk of result) {
+              chunks.push(chunk);
+            }
+            buffer = Buffer.concat(chunks);
+            logger.debug(`[DOWNLOAD] Stream convertido a buffer, tamaño: ${buffer.length} bytes`);
+          } else {
+            // Si es un objeto, buscar la propiedad que contiene los datos
+            logger.debug(`[DOWNLOAD] Resultado es un objeto, propiedades: ${Object.keys(result)}`);
+            
+            if (result.data) {
+              buffer = Buffer.from(result.data);
+              logger.debug(`[DOWNLOAD] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
+            } else if (result.buffer) {
+              buffer = Buffer.from(result.buffer);
+              logger.debug(`[DOWNLOAD] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
+            } else if (result.content) {
+              buffer = Buffer.from(result.content);
+              logger.debug(`[DOWNLOAD] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
+            } else {
+              // Intentar convertir todo el objeto a buffer
+              buffer = Buffer.from(JSON.stringify(result));
+              logger.debug(`[DOWNLOAD] Convertido objeto completo a buffer, tamaño: ${buffer.length} bytes`);
+            }
+          }
+        } else {
+          throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+        }
+        
+        tempMessageData.data.data = buffer.toString('base64');
+        logger.debug(`[DOWNLOAD] Imagen descargada exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
+        
+        // Verificar que los datos se guardaron correctamente
+        if (tempMessageData.data.data) {
+          logger.debug(`[DOWNLOAD] Datos base64 guardados correctamente en tempMessageData.data.data`);
+        } else {
+          logger.warn(`[DOWNLOAD] ERROR: Los datos base64 no se guardaron correctamente`);
+        }
+      } catch (error) {
+        logger.error(`[DOWNLOAD] Error descargando imagen de ${tempMessageData.phoneNumber}: ${error.message}`);
+        logger.error(`[DOWNLOAD] Stack trace: ${error.stack}`);
+        logger.error(`[DOWNLOAD] Tipo de error: ${error.constructor.name}`);
+        logger.error(`[DOWNLOAD] Error completo: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
+        // No es un error crítico, continuar sin los datos de la imagen
+      }
     } else if (msg.message.videoMessage) {
       tempMessageData.type = _MESSAGE_TYPE_VIDEO;
       tempMessageData.hasMedia = true;
