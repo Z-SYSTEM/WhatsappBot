@@ -1,5 +1,5 @@
 const express = require('express');
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs-extra');
 const path = require('path');
@@ -657,9 +657,9 @@ async function handleIncomingMessage(msg) {
       
       try {
         logger.debug(`[DOWNLOAD] Iniciando descarga de imagen para ${tempMessageData.phoneNumber}`);
-        logger.debug(`[DOWNLOAD] sock.downloadMediaMessage disponible: ${typeof sock.downloadMediaMessage}`);
+        logger.debug(`[DOWNLOAD] downloadMediaMessage disponible: ${typeof downloadMediaMessage}`);
         
-        const buffer = await sock.downloadMediaMessage(msg);
+        const buffer = await downloadMediaMessage(msg);
         logger.debug(`[DOWNLOAD] Buffer obtenido, tamaño: ${buffer.length} bytes`);
         
         tempMessageData.data.data = buffer.toString('base64');
@@ -690,7 +690,7 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.videoMessage);
       
       try {
-        const buffer = await sock.downloadMediaMessage(msg);
+        const buffer = await downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar video de ${tempMessageData.phoneNumber}: ${error.message}`);
@@ -707,7 +707,7 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.audioMessage);
       
       try {
-        const buffer = await sock.downloadMediaMessage(msg);
+        const buffer = await downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar audio de ${tempMessageData.phoneNumber}: ${error.message}`);
@@ -725,7 +725,7 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.documentMessage);
       
       try {
-        const buffer = await sock.downloadMediaMessage(msg);
+        const buffer = await downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar documento de ${tempMessageData.phoneNumber}: ${error.message}`);
@@ -742,7 +742,7 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
       
       try {
-        const buffer = await sock.downloadMediaMessage(msg);
+        const buffer = await downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
       } catch (error) {
         logger.debug(`No se pudo descargar sticker de ${tempMessageData.phoneNumber}: ${error.message}`);
