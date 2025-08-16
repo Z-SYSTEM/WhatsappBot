@@ -595,10 +595,10 @@ async function handleIncomingMessage(msg) {
     // Extraer texto del mensaje
     if (msg.message.conversation) {
       tempMessageData.body = msg.message.conversation;
-      tempMessageData.type = 'text';
+      tempMessageData.type = 'chat';
     } else if (msg.message.extendedTextMessage) {
       tempMessageData.body = msg.message.extendedTextMessage.text;
-      tempMessageData.type = 'text';
+      tempMessageData.type = 'chat';
       tempMessageData.isForwarded = isMessageForwarded(msg.message.extendedTextMessage);
     } else if (msg.message.imageMessage) {
       tempMessageData.type = 'image';
@@ -750,23 +750,62 @@ async function handleIncomingMessage(msg) {
     // Enviar webhook si está configurado
     if (ONMESSAGE) {
       try {
+        // Log de debug para ver qué se está enviando
+        logger.debug(`[WEBHOOK] Enviando webhook a ${ONMESSAGE} - Tipo: ${tempMessageData.type} - De: ${tempMessageData.phoneNumber}`);
+        
+        // Crear una copia limpia de los datos para evitar problemas de serialización
+        const webhookData = {
+          phoneNumber: tempMessageData.phoneNumber,
+          type: tempMessageData.type,
+          from: tempMessageData.from,
+          id: tempMessageData.id,
+          timestamp: tempMessageData.timestamp,
+          body: tempMessageData.body || '',
+          hasMedia: tempMessageData.hasMedia || false,
+          data: tempMessageData.data || {},
+          isForwarded: tempMessageData.isForwarded || false
+        };
+        
+        // Verificar que los datos se pueden serializar correctamente
+        try {
+          JSON.stringify(webhookData);
+        } catch (serializeError) {
+          logger.error('Error serializando datos del webhook:', serializeError.message);
+          logger.error('Datos problemáticos:', webhookData);
+          return;
+        }
+        
+        // Configuración de axios para el webhook
+        const axiosConfig = {
+          timeout: 10000, // 10 segundos de timeout
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'WhatsApp-Bot/1.0'
+          }
+        };
+        
         // Manejar álbumes de manera especial
         if (tempMessageData.type === 'album') {
           // Para álbumes, enviar múltiples mensajes
           // Por ahora, enviar un mensaje con información del álbum
           const albumData = {
-            ...tempMessageData,
+            ...webhookData,
             type: 'album',
             media: tempMessageData.data.media || [],
             caption: tempMessageData.data.caption || ''
           };
-          await axios.post(ONMESSAGE, albumData);
+          await axios.post(ONMESSAGE, albumData, axiosConfig);
         } else {
           // Para otros tipos de mensaje, enviar normalmente
-          await axios.post(ONMESSAGE, tempMessageData);
+          await axios.post(ONMESSAGE, webhookData, axiosConfig);
         }
+        
+        logger.debug(`[WEBHOOK] Webhook enviado exitosamente para ${tempMessageData.phoneNumber}`);
       } catch (error) {
         logger.error('Error enviando webhook ONMESSAGE:', error.message);
+        logger.error('Error completo:', error);
+        logger.error('URL del webhook:', ONMESSAGE);
+        logger.error('Datos enviados:', JSON.stringify(tempMessageData, null, 2));
       }
     }
 
