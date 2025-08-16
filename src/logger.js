@@ -63,7 +63,17 @@ const logMessage = {
     tempLogData.phoneNumber = messageData.phoneNumber;
     tempLogData.hasMedia = messageData.hasMedia;
     tempLogData.timestamp = new Date().toISOString();
-    logger.info('Mensaje recibido', tempLogData);
+    
+    // Crear mensaje descriptivo con remitente y contenido
+    let logMessage = `Mensaje recibido de ${messageData.phoneNumber}`;
+    
+    if (messageData.body && messageData.body.trim()) {
+      logMessage += `: "${messageData.body}"`;
+    } else if (messageData.type !== 'chat') {
+      logMessage += ` (${messageData.type})`;
+    }
+    
+    logger.info(logMessage, tempLogData);
   },
   
   sent: (messageData) => {

@@ -573,7 +573,7 @@ async function connectToWhatsApp() {
 async function handleIncomingMessage(msg) {
   try {
     // Reutilizar objeto para evitar allocations
-    tempMessageData.phoneNumber = msg.key.remoteJid.replace('@c.us', '');
+    tempMessageData.phoneNumber = msg.key.remoteJid.replace('@c.us', '').replace('@s.whatsapp.net', '');
     tempMessageData.type = 'chat';
     tempMessageData.from = msg.key.remoteJid;
     tempMessageData.id = msg.key.id;
@@ -709,7 +709,6 @@ async function handleIncomingMessage(msg) {
     if (ONMESSAGE) {
       try {
         await axios.post(ONMESSAGE, tempMessageData);
-        logger.info(`Mensaje enviado a webhook: ${tempMessageData.type} de ${tempMessageData.phoneNumber}`);
       } catch (error) {
         logger.error('Error enviando webhook ONMESSAGE:', error.message);
       }
@@ -724,7 +723,7 @@ async function handleIncomingMessage(msg) {
 async function handleCall(json) {
   try {
     // Reutilizar objeto para evitar allocations
-    tempMessageData.phoneNumber = json[0].id.replace('@c.us', '');
+    tempMessageData.phoneNumber = json[0].id.replace('@c.us', '').replace('@s.whatsapp.net', '');
     tempMessageData.type = 'call';
     tempMessageData.from = json[0].id;
     tempMessageData.id = `call_${Date.now()}`;
