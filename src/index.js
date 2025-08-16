@@ -763,6 +763,7 @@ async function handleIncomingMessage(msg) {
           body: tempMessageData.body || '',
           hasMedia: tempMessageData.hasMedia || false,
           data: tempMessageData.data || {},
+          
           isForwarded: tempMessageData.isForwarded || false
         };
         
@@ -1683,3 +1684,9 @@ process.on('unhandledRejection', async (reason, promise) => {
     logger.error('[RECOVERY] Error al reiniciar bot tras unhandledRejection:', e);
   }
 });
+
+
+
+
+
+
