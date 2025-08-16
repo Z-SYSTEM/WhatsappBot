@@ -652,25 +652,58 @@ function isMessageForwarded(messageObj) {
 function generateAlbumId(msg) {
   const remoteJid = msg.key.remoteJid;
   const timestamp = msg.messageTimestamp;
-  return `${remoteJid}_${timestamp}`;
+  
+  // Si tiene contextInfo con productId, usar eso para agrupar mejor
+  if (msg.message?.imageMessage?.contextInfo?.productId) {
+    const productId = msg.message.imageMessage.contextInfo.productId;
+    return `${remoteJid}_${productId}`;
+  }
+  
+  // Si no tiene productId, usar timestamp con una ventana de tiempo más amplia
+  // Agrupar mensajes que lleguen en un rango de 30 segundos
+  const timeWindow = Math.floor(timestamp / 30);
+  return `${remoteJid}_${timeWindow}`;
 }
 
 // Función para verificar si un mensaje pertenece a un álbum
 function isAlbumMessage(msg) {
-  // Verificar si es una imagen con contexto de álbum
-  if (msg.message && msg.message.imageMessage && msg.message.imageMessage.contextInfo) {
-    const contextInfo = msg.message.imageMessage.contextInfo;
-    
-    // Un mensaje es parte de un álbum si:
-    // 1. Tiene contextInfo
-    // 2. No es reenviado
-    // 3. Tiene productId (indicador de álbum)
-    // 4. O tiene businessOwnerJid (indicador de álbum de negocio)
-    return contextInfo.isForwarded === false && 
-           (contextInfo.productId || contextInfo.businessOwnerJid);
+  // Verificar si es una imagen
+  if (!msg.message || !msg.message.imageMessage) {
+    return false;
   }
   
-  return false;
+  const imageMessage = msg.message.imageMessage;
+  
+  // Log detallado para debugging
+  logger.debug(`[ALBUM_CHECK] Verificando mensaje ${msg.key.id} para álbum`);
+  logger.debug(`[ALBUM_CHECK] contextInfo: ${JSON.stringify(imageMessage.contextInfo)}`);
+  logger.debug(`[ALBUM_CHECK] productId: ${imageMessage.contextInfo?.productId}`);
+  logger.debug(`[ALBUM_CHECK] businessOwnerJid: ${imageMessage.contextInfo?.businessOwnerJid}`);
+  logger.debug(`[ALBUM_CHECK] isForwarded: ${imageMessage.contextInfo?.isForwarded}`);
+  
+  // Verificar si tiene contextInfo
+  if (!imageMessage.contextInfo) {
+    logger.debug(`[ALBUM_CHECK] No tiene contextInfo, no es álbum`);
+    return false;
+  }
+  
+  const contextInfo = imageMessage.contextInfo;
+  
+  // Un mensaje es parte de un álbum si:
+  // 1. Tiene contextInfo
+  // 2. No es reenviado (o es undefined/null)
+  // 3. Tiene productId (indicador de álbum)
+  // 4. O tiene businessOwnerJid (indicador de álbum de negocio)
+  // 5. O tiene isForwarded = false explícitamente
+  
+  const isNotForwarded = contextInfo.isForwarded === false || contextInfo.isForwarded === undefined || contextInfo.isForwarded === null;
+  const hasAlbumIndicator = contextInfo.productId || contextInfo.businessOwnerJid;
+  
+  const isAlbum = isNotForwarded && hasAlbumIndicator;
+  
+  logger.debug(`[ALBUM_CHECK] isNotForwarded: ${isNotForwarded}, hasAlbumIndicator: ${hasAlbumIndicator}, isAlbum: ${isAlbum}`);
+  
+  return isAlbum;
 }
 
 // Función para procesar álbum completo
@@ -685,31 +718,84 @@ async function processAlbum(albumId) {
     const { messages, caption, from, timestamp } = albumData;
     logger.info(`[ALBUM] Procesando álbum con ${messages.length} imágenes de ${from}`);
 
-    // Procesar cada imagen del álbum individualmente
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      const imageCaption = (i === 0 && caption) ? caption : ''; // Solo caption en la primera imagen
-      
-      // Crear un mensaje individual para cada imagen
-      const individualMsg = {
-        ...msg,
-        message: {
-          imageMessage: {
-            ...msg.message.imageMessage,
-            caption: imageCaption
-          }
-        }
-      };
+    // Agregar todos los IDs de mensajes a la lista de procesados
+    for (const msg of messages) {
+      processedMessageIds.add(msg.key.id);
+    }
 
-      // Procesar la imagen individual
-      await processIndividualImage(individualMsg, i + 1, messages.length);
+    // Limpiar IDs antiguos
+    if (processedMessageIds.size > _PROCESSED_MESSAGES_MAX_SIZE) {
+      const idsArray = Array.from(processedMessageIds);
+      processedMessageIds.clear();
+      idsArray.slice(-_PROCESSED_MESSAGES_KEEP_SIZE).forEach(id => processedMessageIds.add(id));
+    }
+
+    // Crear datos del álbum para el webhook
+    const albumMessageData = {
+      phoneNumber: from.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+      type: _MESSAGE_TYPE_ALBUM,
+      from: from,
+      id: `album_${albumId}`,
+      timestamp: timestamp,
+      body: JSON.stringify({
+        images: messages.map((msg, index) => ({
+          url: `https://wa.me/${msg.key.id}`, // URL de WhatsApp para la imagen
+          caption: index === 0 ? caption : '', // Solo caption en la primera imagen
+          mimetype: msg.message.imageMessage.mimetype || 'image/jpeg',
+          filename: msg.message.imageMessage.fileName || `image_${index + 1}.jpg`
+        })),
+        totalImages: messages.length,
+        caption: caption || ''
+      }),
+      hasMedia: true,
+      data: {
+        albumId: albumId,
+        totalImages: messages.length,
+        images: messages.map((msg, index) => ({
+          url: `https://wa.me/${msg.key.id}`,
+          caption: index === 0 ? caption : '',
+          mimetype: msg.message.imageMessage.mimetype || 'image/jpeg',
+          filename: msg.message.imageMessage.fileName || `image_${index + 1}.jpg`
+        }))
+      },
+      isForwarded: false
+    };
+
+    // Log del álbum recibido
+    logMessage.received(albumMessageData);
+
+    // Enviar webhook si está configurado
+    if (ONMESSAGE) {
+      try {
+        logger.debug(`[WEBHOOK] Enviando webhook de álbum a ${ONMESSAGE} - ${messages.length} imágenes de ${albumMessageData.phoneNumber}`);
+        
+        // Configuración de axios para el webhook
+        const axiosConfig = {
+          timeout: 10000, // 10 segundos de timeout
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'WhatsApp-Bot/1.0'
+          }
+        };
+        
+        // Enviar webhook del álbum
+        await logOnMessageRequest(albumMessageData);
+        await axios.post(ONMESSAGE, albumMessageData, axiosConfig);
+        
+        logger.debug(`[WEBHOOK] Webhook de álbum enviado exitosamente para ${albumMessageData.phoneNumber}`);
+      } catch (error) {
+        logger.error('Error enviando webhook de álbum ONMESSAGE:', error.message);
+        logger.error('Error completo:', error);
+        logger.error('URL del webhook:', ONMESSAGE);
+        logger.error('Datos enviados:', JSON.stringify(albumMessageData, null, 2));
+      }
     }
 
     // Limpiar datos del álbum
     albumMessages.delete(albumId);
     albumTracker.delete(albumId);
     
-    logger.info(`[ALBUM] Álbum procesado completamente: ${albumId}`);
+    logger.info(`[ALBUM] Álbum procesado completamente: ${albumId} - ${messages.length} imágenes enviadas en un solo webhook`);
   } catch (error) {
     logger.error(`[ALBUM] Error procesando álbum ${albumId}:`, error.message);
     // Limpiar datos en caso de error
@@ -718,33 +804,7 @@ async function processAlbum(albumId) {
   }
 }
 
-// Función para procesar imagen individual de un álbum
-async function processIndividualImage(msg, imageIndex, totalImages) {
-  try {
-    // Verificar si el mensaje ya fue procesado
-    if (processedMessageIds.has(msg.key.id)) {
-      logger.debug(`[ALBUM_IMAGE] Imagen ${imageIndex}/${totalImages} ya procesada: ${msg.key.id}`);
-      return;
-    }
-    
-    // Agregar el ID a la lista de procesados
-    processedMessageIds.add(msg.key.id);
-    
-    // Limpiar IDs antiguos
-    if (processedMessageIds.size > _PROCESSED_MESSAGES_MAX_SIZE) {
-      const idsArray = Array.from(processedMessageIds);
-      processedMessageIds.clear();
-      idsArray.slice(-_PROCESSED_MESSAGES_KEEP_SIZE).forEach(id => processedMessageIds.add(id));
-    }
 
-    // Procesar la imagen como un mensaje normal
-    await handleIncomingMessage(msg);
-    
-    logger.debug(`[ALBUM_IMAGE] Imagen ${imageIndex}/${totalImages} procesada exitosamente`);
-  } catch (error) {
-    logger.error(`[ALBUM_IMAGE] Error procesando imagen ${imageIndex}/${totalImages}:`, error.message);
-  }
-}
 
 // Función para manejar mensajes entrantes
 async function handleIncomingMessage(msg) {
