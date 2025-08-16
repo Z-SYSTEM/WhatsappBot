@@ -1148,6 +1148,9 @@ async function handleIncomingMessage(msg) {
                  // Verificar que los datos se guardaron correctamente
                  if (tempMessageData.data.data) {
                    logger.debug(`[STICKER] Datos base64 guardados correctamente en tempMessageData.data.data`);
+                   logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data existe: ${!!tempMessageData.data.data}`);
+                   logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data longitud: ${tempMessageData.data.data.length} caracteres`);
+                   logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data completo: ${JSON.stringify(tempMessageData.data)}`);
                  } else {
                    logger.warn(`[STICKER] ERROR: Los datos base64 no se guardaron correctamente`);
                  }
@@ -1229,28 +1232,28 @@ async function handleIncomingMessage(msg) {
           logger.debug(`[WEBHOOK] - data.data longitud: ${tempMessageData.data.data.length} caracteres`);
         }
         
-        // Crear una copia limpia de los datos para evitar problemas de serialización
-        const webhookData = {
-          phoneNumber: tempMessageData.phoneNumber,
-          type: tempMessageData.type,
-          from: tempMessageData.from,
-          id: tempMessageData.id,
-          timestamp: tempMessageData.timestamp,
-          body: tempMessageData.body || '',
-          hasMedia: tempMessageData.hasMedia || false,
-          data: tempMessageData.data || {},
-          
-          isForwarded: tempMessageData.isForwarded || false
-        };
-        
-        // Log específico para stickers para verificar la estructura final
-        if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
-          logger.info(`[WEBHOOK] STICKER - webhookData.data: ${JSON.stringify(webhookData.data)}`);
-          logger.info(`[WEBHOOK] STICKER - webhookData.data.data existe: ${!!webhookData.data.data}`);
-          if (webhookData.data.data) {
-            logger.info(`[WEBHOOK] STICKER - webhookData.data.data longitud: ${webhookData.data.data.length} caracteres`);
-          }
-        }
+                 // Crear una copia limpia de los datos para evitar problemas de serialización
+         const webhookData = {
+           phoneNumber: tempMessageData.phoneNumber,
+           type: tempMessageData.type,
+           from: tempMessageData.from,
+           id: tempMessageData.id,
+           timestamp: tempMessageData.timestamp,
+           body: tempMessageData.body || '',
+           hasMedia: tempMessageData.hasMedia || false,
+           data: tempMessageData.data || {},
+           
+           isForwarded: tempMessageData.isForwarded || false
+         };
+         
+                  // Log específico para stickers para verificar la estructura final
+         if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
+           logger.info(`[WEBHOOK] STICKER - webhookData.data: ${JSON.stringify(webhookData.data)}`);
+           logger.info(`[WEBHOOK] STICKER - webhookData.data.data existe: ${!!webhookData.data.data}`);
+           if (webhookData.data.data) {
+             logger.info(`[WEBHOOK] STICKER - webhookData.data.data longitud: ${webhookData.data.data.length} caracteres`);
+           }
+         }
         
         // Log para verificar que los datos de media se incluyen correctamente
         if (tempMessageData.hasMedia && tempMessageData.data && tempMessageData.data.data) {
