@@ -1103,62 +1103,97 @@ async function handleIncomingMessage(msg) {
                logger.info(`[STICKER] PackName: ${tempMessageData.data.packName}`);
                logger.info(`[STICKER] IsAnimated: ${tempMessageData.data.isAnimated}`);
                
-               try {
-                 logger.info(`[STICKER] Iniciando descarga de sticker para ${tempMessageData.phoneNumber}`);
-                 const result = await downloadMediaMessage(msg);
-                 let buffer;
-                 
-                 logger.debug(`[STICKER] Resultado de downloadMediaMessage tipo: ${typeof result}`);
-                 
-                 if (Buffer.isBuffer(result)) {
-                   buffer = result;
-                   logger.debug(`[STICKER] Resultado es Buffer, tamaño: ${buffer.length} bytes`);
-                 } else if (result && typeof result === 'object') {
-                   logger.debug(`[STICKER] Resultado es objeto, propiedades: ${Object.keys(result)}`);
-                   if (result.readable || result.pipe || result.on) {
-                     logger.debug(`[STICKER] Resultado es Stream, convirtiendo a buffer...`);
-                     const chunks = [];
-                     for await (const chunk of result) {
-                       chunks.push(chunk);
-                     }
-                     buffer = Buffer.concat(chunks);
-                     logger.debug(`[STICKER] Stream convertido a buffer, tamaño: ${buffer.length} bytes`);
-                   } else {
-                     if (result.data) {
-                       buffer = Buffer.from(result.data);
-                       logger.debug(`[STICKER] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
-                     } else if (result.buffer) {
-                       buffer = Buffer.from(result.buffer);
-                       logger.debug(`[STICKER] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
-                     } else if (result.content) {
-                       buffer = Buffer.from(result.content);
-                       logger.debug(`[STICKER] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
-                     } else {
-                       buffer = Buffer.from(JSON.stringify(result));
-                       logger.debug(`[STICKER] Objeto convertido a buffer, tamaño: ${buffer.length} bytes`);
-                     }
-                   }
-                 } else {
-                   throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
-                 }
-                 
-                 tempMessageData.data.data = buffer.toString('base64');
-                 logger.info(`[STICKER] Sticker descargado exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
-                 
-                 // Verificar que los datos se guardaron correctamente
-                 if (tempMessageData.data.data) {
-                   logger.debug(`[STICKER] Datos base64 guardados correctamente en tempMessageData.data.data`);
-                   logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data existe: ${!!tempMessageData.data.data}`);
-                   logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data longitud: ${tempMessageData.data.data.length} caracteres`);
-                   logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data completo: ${JSON.stringify(tempMessageData.data)}`);
-                 } else {
-                   logger.warn(`[STICKER] ERROR: Los datos base64 no se guardaron correctamente`);
-                 }
-               } catch (error) {
-                 logger.error(`[STICKER] Error descargando sticker de ${tempMessageData.phoneNumber}: ${error.message}`);
-                 logger.error(`[STICKER] Stack trace: ${error.stack}`);
-                 // No es un error crítico, continuar sin los datos del sticker
-               }
+                               // Función para descargar sticker con reintentos
+                const downloadStickerWithRetry = async (msg, maxRetries = 3) => {
+                  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                    try {
+                      logger.info(`[STICKER] Intento ${attempt}/${maxRetries} de descarga para ${tempMessageData.phoneNumber}`);
+                      
+                      const result = await downloadMediaMessage(msg);
+                      let buffer;
+                      
+                      logger.debug(`[STICKER] Resultado de downloadMediaMessage tipo: ${typeof result}`);
+                      
+                      if (Buffer.isBuffer(result)) {
+                        buffer = result;
+                        logger.debug(`[STICKER] Resultado es Buffer, tamaño: ${buffer.length} bytes`);
+                      } else if (result && typeof result === 'object') {
+                        logger.debug(`[STICKER] Resultado es objeto, propiedades: ${Object.keys(result)}`);
+                        if (result.readable || result.pipe || result.on) {
+                          logger.debug(`[STICKER] Resultado es Stream, convirtiendo a buffer...`);
+                          const chunks = [];
+                          for await (const chunk of result) {
+                            chunks.push(chunk);
+                          }
+                          buffer = Buffer.concat(chunks);
+                          logger.debug(`[STICKER] Stream convertido a buffer, tamaño: ${buffer.length} bytes`);
+                        } else {
+                          if (result.data) {
+                            buffer = Buffer.from(result.data);
+                            logger.debug(`[STICKER] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
+                          } else if (result.buffer) {
+                            buffer = Buffer.from(result.buffer);
+                            logger.debug(`[STICKER] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
+                          } else if (result.content) {
+                            buffer = Buffer.from(result.content);
+                            logger.debug(`[STICKER] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
+                          } else {
+                            buffer = Buffer.from(JSON.stringify(result));
+                            logger.debug(`[STICKER] Objeto convertido a buffer, tamaño: ${buffer.length} bytes`);
+                          }
+                        }
+                      } else {
+                        throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
+                      }
+                      
+                      tempMessageData.data.data = buffer.toString('base64');
+                      logger.info(`[STICKER] Sticker descargado exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
+                      
+                      // Verificar que los datos se guardaron correctamente
+                      if (tempMessageData.data.data) {
+                        logger.debug(`[STICKER] Datos base64 guardados correctamente en tempMessageData.data.data`);
+                        logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data existe: ${!!tempMessageData.data.data}`);
+                        logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data.data longitud: ${tempMessageData.data.data.length} caracteres`);
+                        logger.info(`[STICKER] VERIFICACIÓN - tempMessageData.data completo: ${JSON.stringify(tempMessageData.data)}`);
+                        return true; // Éxito
+                      } else {
+                        logger.warn(`[STICKER] ERROR: Los datos base64 no se guardaron correctamente`);
+                        throw new Error('Datos no se guardaron correctamente');
+                      }
+                      
+                    } catch (error) {
+                      logger.error(`[STICKER] Error en intento ${attempt}/${maxRetries} para ${tempMessageData.phoneNumber}: ${error.message}`);
+                      
+                                             // Si es error de red, esperar antes del siguiente intento
+                       if (error.message.includes('ENOTFOUND') || error.message.includes('ECONNREFUSED') || 
+                           error.message.includes('timeout') || error.message.includes('getaddrinfo')) {
+                         if (attempt < maxRetries) {
+                           const delay = attempt * 2000; // 2, 4, 6 segundos
+                           logger.info(`[STICKER] Error de red detectado, esperando ${delay}ms antes del siguiente intento...`);
+                           await new Promise(resolve => setTimeout(resolve, delay));
+                           continue;
+                         }
+                       }
+                      
+                      // Si es el último intento o error no es de red, fallar
+                      if (attempt === maxRetries) {
+                        logger.error(`[STICKER] Todos los intentos fallaron para ${tempMessageData.phoneNumber}`);
+                        logger.error(`[STICKER] Stack trace: ${error.stack}`);
+                        
+                        // Agregar información del error al webhook
+                        tempMessageData.data.downloadError = {
+                          message: error.message,
+                          attempts: maxRetries,
+                          timestamp: new Date().toISOString()
+                        };
+                      }
+                      return false; // Fallo
+                    }
+                  }
+                };
+                
+                // Intentar descargar el sticker
+                await downloadStickerWithRetry(msg, 3);
     } else if (msg.message.locationMessage) {
       tempMessageData.type = _MESSAGE_TYPE_LOCATION;
       tempMessageData.data = {
@@ -1350,6 +1385,40 @@ async function handleCall(json) {
 
   } catch (error) {
     logger.error('Error procesando llamada:', error.message);
+  }
+}
+
+// Función para verificar conectividad de red
+async function checkNetworkConnectivity() {
+  try {
+    // Verificar DNS con dominios reales de WhatsApp
+    const dns = require('dns').promises;
+    const whatsappDomains = [
+      'mmg.whatsapp.net',
+      'media.fada1-1.fna.whatsapp.net',
+      'media.fada1-2.fna.whatsapp.net'
+    ];
+    
+    for (const domain of whatsappDomains) {
+      try {
+        await dns.lookup(domain);
+        logger.info(`[NETWORK] DNS de WhatsApp resuelto correctamente: ${domain}`);
+        return true;
+      } catch (domainError) {
+        logger.debug(`[NETWORK] No se puede resolver ${domain}: ${domainError.message}`);
+      }
+    }
+    
+    logger.warn('[NETWORK] No se pudo resolver ningún dominio de WhatsApp');
+    return false;
+  } catch (error) {
+    logger.error('[NETWORK] Error de conectividad detectado:', error.message);
+    logger.error('[NETWORK] Esto puede deberse a:');
+    logger.error('[NETWORK] 1. Problemas de DNS');
+    logger.error('[NETWORK] 2. Firewall bloqueando WhatsApp');
+    logger.error('[NETWORK] 3. Red corporativa con restricciones');
+    logger.error('[NETWORK] 4. Problemas de conectividad de internet');
+    return false;
   }
 }
 
@@ -2167,6 +2236,14 @@ async function startServer() {
     });
   });
 }
+
+// Verificar conectividad de red al inicio
+checkNetworkConnectivity().then(isConnected => {
+  if (!isConnected) {
+    logger.warn('[NETWORK] Se detectaron problemas de conectividad. Los stickers pueden no descargarse correctamente.');
+    logger.warn('[NETWORK] Se implementarán reintentos automáticos para la descarga de stickers.');
+  }
+});
 
 // Iniciar la aplicación
 startServer();
