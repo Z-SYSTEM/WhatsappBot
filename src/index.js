@@ -655,6 +655,7 @@ async function handleIncomingMessage(msg) {
       try {
         const buffer = await sock.downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
+        logger.debug(`Imagen descargada exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes`);
       } catch (error) {
         logger.debug(`No se pudo descargar imagen de ${tempMessageData.phoneNumber}: ${error.message}`);
         // No es un error crítico, continuar sin los datos de la imagen
@@ -806,6 +807,13 @@ async function handleIncomingMessage(msg) {
           
           isForwarded: tempMessageData.isForwarded || false
         };
+        
+        // Log para verificar que los datos de media se incluyen correctamente
+        if (tempMessageData.hasMedia && tempMessageData.data && tempMessageData.data.data) {
+          logger.debug(`[WEBHOOK] Datos de media incluidos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}, tamaño base64: ${tempMessageData.data.data.length} caracteres`);
+        } else if (tempMessageData.hasMedia) {
+          logger.warn(`[WEBHOOK] Media marcado como true pero no hay datos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}`);
+        }
         
         // Verificar que los datos se pueden serializar correctamente
         try {
