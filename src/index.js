@@ -1097,28 +1097,45 @@ async function handleIncomingMessage(msg) {
                
                tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
                
+               logger.info(`[STICKER] Sticker recibido de ${tempMessageData.phoneNumber}`);
+               logger.info(`[STICKER] StickerId: ${tempMessageData.data.stickerId}`);
+               logger.info(`[STICKER] PackId: ${tempMessageData.data.packId}`);
+               logger.info(`[STICKER] PackName: ${tempMessageData.data.packName}`);
+               logger.info(`[STICKER] IsAnimated: ${tempMessageData.data.isAnimated}`);
+               
                try {
+                 logger.info(`[STICKER] Iniciando descarga de sticker para ${tempMessageData.phoneNumber}`);
                  const result = await downloadMediaMessage(msg);
                  let buffer;
                  
+                 logger.debug(`[STICKER] Resultado de downloadMediaMessage tipo: ${typeof result}`);
+                 
                  if (Buffer.isBuffer(result)) {
                    buffer = result;
+                   logger.debug(`[STICKER] Resultado es Buffer, tamaño: ${buffer.length} bytes`);
                  } else if (result && typeof result === 'object') {
+                   logger.debug(`[STICKER] Resultado es objeto, propiedades: ${Object.keys(result)}`);
                    if (result.readable || result.pipe || result.on) {
+                     logger.debug(`[STICKER] Resultado es Stream, convirtiendo a buffer...`);
                      const chunks = [];
                      for await (const chunk of result) {
                        chunks.push(chunk);
                      }
                      buffer = Buffer.concat(chunks);
+                     logger.debug(`[STICKER] Stream convertido a buffer, tamaño: ${buffer.length} bytes`);
                    } else {
                      if (result.data) {
                        buffer = Buffer.from(result.data);
+                       logger.debug(`[STICKER] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
                      } else if (result.buffer) {
                        buffer = Buffer.from(result.buffer);
+                       logger.debug(`[STICKER] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
                      } else if (result.content) {
                        buffer = Buffer.from(result.content);
+                       logger.debug(`[STICKER] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
                      } else {
                        buffer = Buffer.from(JSON.stringify(result));
+                       logger.debug(`[STICKER] Objeto convertido a buffer, tamaño: ${buffer.length} bytes`);
                      }
                    }
                  } else {
@@ -1126,9 +1143,17 @@ async function handleIncomingMessage(msg) {
                  }
                  
                  tempMessageData.data.data = buffer.toString('base64');
-                 logger.info(`[STICKER] Sticker descargado de ${tempMessageData.phoneNumber}`);
+                 logger.info(`[STICKER] Sticker descargado exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
+                 
+                 // Verificar que los datos se guardaron correctamente
+                 if (tempMessageData.data.data) {
+                   logger.debug(`[STICKER] Datos base64 guardados correctamente en tempMessageData.data.data`);
+                 } else {
+                   logger.warn(`[STICKER] ERROR: Los datos base64 no se guardaron correctamente`);
+                 }
                } catch (error) {
                  logger.error(`[STICKER] Error descargando sticker de ${tempMessageData.phoneNumber}: ${error.message}`);
+                 logger.error(`[STICKER] Stack trace: ${error.stack}`);
                  // No es un error crítico, continuar sin los datos del sticker
                }
     } else if (msg.message.locationMessage) {
@@ -1221,8 +1246,24 @@ async function handleIncomingMessage(msg) {
         // Log para verificar que los datos de media se incluyen correctamente
         if (tempMessageData.hasMedia && tempMessageData.data && tempMessageData.data.data) {
           logger.debug(`[WEBHOOK] Datos de media incluidos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}, tamaño base64: ${tempMessageData.data.data.length} caracteres`);
+          
+          // Log específico para stickers con datos
+          if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
+            logger.info(`[WEBHOOK] STICKER CON DATOS: ${tempMessageData.phoneNumber}`);
+            logger.info(`[WEBHOOK] STICKER - tamaño base64: ${tempMessageData.data.data.length} caracteres`);
+            logger.info(`[WEBHOOK] STICKER - primeros 100 caracteres: ${tempMessageData.data.data.substring(0, 100)}...`);
+          }
         } else if (tempMessageData.hasMedia) {
           logger.warn(`[WEBHOOK] Media marcado como true pero no hay datos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}`);
+          
+          // Log específico para stickers
+          if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
+            logger.warn(`[WEBHOOK] STICKER SIN DATOS: ${tempMessageData.phoneNumber}`);
+            logger.warn(`[WEBHOOK] STICKER - hasMedia: ${tempMessageData.hasMedia}`);
+            logger.warn(`[WEBHOOK] STICKER - data existe: ${!!tempMessageData.data}`);
+            logger.warn(`[WEBHOOK] STICKER - data.data existe: ${!!tempMessageData.data.data}`);
+            logger.warn(`[WEBHOOK] STICKER - data completo: ${JSON.stringify(tempMessageData.data)}`);
+          }
         }
         
         // Verificar que los datos se pueden serializar correctamente
