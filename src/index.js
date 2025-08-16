@@ -1637,7 +1637,13 @@ setInterval(() => {
 // Endpoint de health check
 app.get('/api/test', authenticateToken, (req, res) => {
   // Log adicional para requests externos (solo una vez por minuto por IP)
-  const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+  let clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+  
+  // Extraer solo la IPv4 si viene con prefijo ::ffff:
+  if (clientIP && clientIP.startsWith('::ffff:')) {
+    clientIP = clientIP.substring(7);
+  }
+  
   const isLocalhost = clientIP === '127.0.0.1' || clientIP === '::1' || clientIP === 'localhost';
   
   if (!isLocalhost) {
