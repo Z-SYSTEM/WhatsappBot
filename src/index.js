@@ -652,12 +652,30 @@ async function handleIncomingMessage(msg) {
       tempMessageData.isForwarded = isMessageForwarded(msg.message.imageMessage);
       
       // Descargar imagen
+      logger.debug(`[DOWNLOAD] Preparando descarga de imagen para ${tempMessageData.phoneNumber}`);
+      logger.debug(`[DOWNLOAD] Mensaje completo: ${JSON.stringify(msg, null, 2)}`);
+      
       try {
+        logger.debug(`[DOWNLOAD] Iniciando descarga de imagen para ${tempMessageData.phoneNumber}`);
+        logger.debug(`[DOWNLOAD] sock.downloadMediaMessage disponible: ${typeof sock.downloadMediaMessage}`);
+        
         const buffer = await sock.downloadMediaMessage(msg);
+        logger.debug(`[DOWNLOAD] Buffer obtenido, tamaño: ${buffer.length} bytes`);
+        
         tempMessageData.data.data = buffer.toString('base64');
-        logger.debug(`Imagen descargada exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes`);
+        logger.debug(`[DOWNLOAD] Imagen descargada exitosamente para ${tempMessageData.phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${tempMessageData.data.data.length} caracteres`);
+        
+        // Verificar que los datos se guardaron correctamente
+        if (tempMessageData.data.data) {
+          logger.debug(`[DOWNLOAD] Datos base64 guardados correctamente en tempMessageData.data.data`);
+        } else {
+          logger.warn(`[DOWNLOAD] ERROR: Los datos base64 no se guardaron correctamente`);
+        }
       } catch (error) {
-        logger.debug(`No se pudo descargar imagen de ${tempMessageData.phoneNumber}: ${error.message}`);
+        logger.error(`[DOWNLOAD] Error descargando imagen de ${tempMessageData.phoneNumber}: ${error.message}`);
+        logger.error(`[DOWNLOAD] Stack trace: ${error.stack}`);
+        logger.error(`[DOWNLOAD] Tipo de error: ${error.constructor.name}`);
+        logger.error(`[DOWNLOAD] Error completo: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
         // No es un error crítico, continuar sin los datos de la imagen
       }
     } else if (msg.message.videoMessage) {
@@ -793,6 +811,15 @@ async function handleIncomingMessage(msg) {
       try {
         // Log de debug para ver qué se está enviando
         logger.debug(`[WEBHOOK] Enviando webhook a ${ONMESSAGE} - Tipo: ${tempMessageData.type} - De: ${tempMessageData.phoneNumber}`);
+        
+        // Verificar el estado de los datos antes de crear webhookData
+        logger.debug(`[WEBHOOK] Estado de tempMessageData antes de crear webhookData:`);
+        logger.debug(`[WEBHOOK] - hasMedia: ${tempMessageData.hasMedia}`);
+        logger.debug(`[WEBHOOK] - data: ${JSON.stringify(tempMessageData.data)}`);
+        logger.debug(`[WEBHOOK] - data.data existe: ${!!tempMessageData.data.data}`);
+        if (tempMessageData.data.data) {
+          logger.debug(`[WEBHOOK] - data.data longitud: ${tempMessageData.data.data.length} caracteres`);
+        }
         
         // Crear una copia limpia de los datos para evitar problemas de serialización
         const webhookData = {
