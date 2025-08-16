@@ -662,28 +662,40 @@ async function handleIncomingMessage(msg) {
         const result = await downloadMediaMessage(msg);
         logger.debug(`[DOWNLOAD] Resultado obtenido, tipo: ${typeof result}, constructor: ${result.constructor.name}`);
         
-        // Verificar si el resultado es un buffer o un objeto
+        // Verificar si el resultado es un buffer, stream o un objeto
         let buffer;
         if (Buffer.isBuffer(result)) {
           buffer = result;
           logger.debug(`[DOWNLOAD] Resultado es un Buffer, tamaño: ${buffer.length} bytes`);
         } else if (result && typeof result === 'object') {
-          // Si es un objeto, buscar la propiedad que contiene los datos
-          logger.debug(`[DOWNLOAD] Resultado es un objeto, propiedades: ${Object.keys(result)}`);
-          
-          if (result.data) {
-            buffer = Buffer.from(result.data);
-            logger.debug(`[DOWNLOAD] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
-          } else if (result.buffer) {
-            buffer = Buffer.from(result.buffer);
-            logger.debug(`[DOWNLOAD] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
-          } else if (result.content) {
-            buffer = Buffer.from(result.content);
-            logger.debug(`[DOWNLOAD] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
+          // Si es un objeto, verificar si es un stream
+          if (result.readable || result.pipe || result.on) {
+            logger.debug(`[DOWNLOAD] Resultado es un Stream, convirtiendo a buffer...`);
+            // Es un stream, convertirlo a buffer
+            const chunks = [];
+            for await (const chunk of result) {
+              chunks.push(chunk);
+            }
+            buffer = Buffer.concat(chunks);
+            logger.debug(`[DOWNLOAD] Stream convertido a buffer, tamaño: ${buffer.length} bytes`);
           } else {
-            // Intentar convertir todo el objeto a buffer
-            buffer = Buffer.from(JSON.stringify(result));
-            logger.debug(`[DOWNLOAD] Convertido objeto completo a buffer, tamaño: ${buffer.length} bytes`);
+            // Si es un objeto, buscar la propiedad que contiene los datos
+            logger.debug(`[DOWNLOAD] Resultado es un objeto, propiedades: ${Object.keys(result)}`);
+            
+            if (result.data) {
+              buffer = Buffer.from(result.data);
+              logger.debug(`[DOWNLOAD] Datos extraídos de result.data, tamaño: ${buffer.length} bytes`);
+            } else if (result.buffer) {
+              buffer = Buffer.from(result.buffer);
+              logger.debug(`[DOWNLOAD] Datos extraídos de result.buffer, tamaño: ${buffer.length} bytes`);
+            } else if (result.content) {
+              buffer = Buffer.from(result.content);
+              logger.debug(`[DOWNLOAD] Datos extraídos de result.content, tamaño: ${buffer.length} bytes`);
+            } else {
+              // Intentar convertir todo el objeto a buffer
+              buffer = Buffer.from(JSON.stringify(result));
+              logger.debug(`[DOWNLOAD] Convertido objeto completo a buffer, tamaño: ${buffer.length} bytes`);
+            }
           }
         } else {
           throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
@@ -723,14 +735,24 @@ async function handleIncomingMessage(msg) {
         if (Buffer.isBuffer(result)) {
           buffer = result;
         } else if (result && typeof result === 'object') {
-          if (result.data) {
-            buffer = Buffer.from(result.data);
-          } else if (result.buffer) {
-            buffer = Buffer.from(result.buffer);
-          } else if (result.content) {
-            buffer = Buffer.from(result.content);
+          // Verificar si es un stream
+          if (result.readable || result.pipe || result.on) {
+            // Es un stream, convertirlo a buffer
+            const chunks = [];
+            for await (const chunk of result) {
+              chunks.push(chunk);
+            }
+            buffer = Buffer.concat(chunks);
           } else {
-            buffer = Buffer.from(JSON.stringify(result));
+            if (result.data) {
+              buffer = Buffer.from(result.data);
+            } else if (result.buffer) {
+              buffer = Buffer.from(result.buffer);
+            } else if (result.content) {
+              buffer = Buffer.from(result.content);
+            } else {
+              buffer = Buffer.from(JSON.stringify(result));
+            }
           }
         } else {
           throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
@@ -758,14 +780,24 @@ async function handleIncomingMessage(msg) {
         if (Buffer.isBuffer(result)) {
           buffer = result;
         } else if (result && typeof result === 'object') {
-          if (result.data) {
-            buffer = Buffer.from(result.data);
-          } else if (result.buffer) {
-            buffer = Buffer.from(result.buffer);
-          } else if (result.content) {
-            buffer = Buffer.from(result.content);
+          // Verificar si es un stream
+          if (result.readable || result.pipe || result.on) {
+            // Es un stream, convertirlo a buffer
+            const chunks = [];
+            for await (const chunk of result) {
+              chunks.push(chunk);
+            }
+            buffer = Buffer.concat(chunks);
           } else {
-            buffer = Buffer.from(JSON.stringify(result));
+            if (result.data) {
+              buffer = Buffer.from(result.data);
+            } else if (result.buffer) {
+              buffer = Buffer.from(result.buffer);
+            } else if (result.content) {
+              buffer = Buffer.from(result.content);
+            } else {
+              buffer = Buffer.from(JSON.stringify(result));
+            }
           }
         } else {
           throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
@@ -794,14 +826,24 @@ async function handleIncomingMessage(msg) {
         if (Buffer.isBuffer(result)) {
           buffer = result;
         } else if (result && typeof result === 'object') {
-          if (result.data) {
-            buffer = Buffer.from(result.data);
-          } else if (result.buffer) {
-            buffer = Buffer.from(result.buffer);
-          } else if (result.content) {
-            buffer = Buffer.from(result.content);
+          // Verificar si es un stream
+          if (result.readable || result.pipe || result.on) {
+            // Es un stream, convertirlo a buffer
+            const chunks = [];
+            for await (const chunk of result) {
+              chunks.push(chunk);
+            }
+            buffer = Buffer.concat(chunks);
           } else {
-            buffer = Buffer.from(JSON.stringify(result));
+            if (result.data) {
+              buffer = Buffer.from(result.data);
+            } else if (result.buffer) {
+              buffer = Buffer.from(result.buffer);
+            } else if (result.content) {
+              buffer = Buffer.from(result.content);
+            } else {
+              buffer = Buffer.from(JSON.stringify(result));
+            }
           }
         } else {
           throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
@@ -829,14 +871,24 @@ async function handleIncomingMessage(msg) {
         if (Buffer.isBuffer(result)) {
           buffer = result;
         } else if (result && typeof result === 'object') {
-          if (result.data) {
-            buffer = Buffer.from(result.data);
-          } else if (result.buffer) {
-            buffer = Buffer.from(result.buffer);
-          } else if (result.content) {
-            buffer = Buffer.from(result.content);
+          // Verificar si es un stream
+          if (result.readable || result.pipe || result.on) {
+            // Es un stream, convertirlo a buffer
+            const chunks = [];
+            for await (const chunk of result) {
+              chunks.push(chunk);
+            }
+            buffer = Buffer.concat(chunks);
           } else {
-            buffer = Buffer.from(JSON.stringify(result));
+            if (result.data) {
+              buffer = Buffer.from(result.data);
+            } else if (result.buffer) {
+              buffer = Buffer.from(result.buffer);
+            } else if (result.content) {
+              buffer = Buffer.from(result.content);
+            } else {
+              buffer = Buffer.from(JSON.stringify(result));
+            }
           }
         } else {
           throw new Error(`Tipo de resultado inesperado: ${typeof result}`);
