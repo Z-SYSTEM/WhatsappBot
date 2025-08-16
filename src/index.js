@@ -573,6 +573,11 @@ async function connectToWhatsApp() {
   }
 }
 
+// Función para verificar si un mensaje es reenviado
+function isMessageForwarded(messageObj) {
+  return messageObj && messageObj.contextInfo && messageObj.contextInfo.isForwarded;
+}
+
 // Función para manejar mensajes entrantes
 async function handleIncomingMessage(msg) {
   try {
@@ -585,14 +590,16 @@ async function handleIncomingMessage(msg) {
     tempMessageData.body = '';
     tempMessageData.hasMedia = false;
     tempMessageData.data = {};
+    tempMessageData.isForwarded = false;
 
     // Extraer texto del mensaje
     if (msg.message.conversation) {
       tempMessageData.body = msg.message.conversation;
-      tempMessageData.type = 'chat';
+      tempMessageData.type = 'text';
     } else if (msg.message.extendedTextMessage) {
       tempMessageData.body = msg.message.extendedTextMessage.text;
-      tempMessageData.type = 'chat';
+      tempMessageData.type = 'text';
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.extendedTextMessage);
     } else if (msg.message.imageMessage) {
       tempMessageData.type = 'image';
       tempMessageData.hasMedia = true;
@@ -601,6 +608,8 @@ async function handleIncomingMessage(msg) {
         mimetype: msg.message.imageMessage.mimetype,
         filename: msg.message.imageMessage.fileName || 'image.jpg'
       };
+      
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.imageMessage);
       
       // Descargar imagen
       try {
@@ -619,6 +628,8 @@ async function handleIncomingMessage(msg) {
         filename: msg.message.videoMessage.fileName || 'video.mp4'
       };
       
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.videoMessage);
+      
       try {
         const buffer = await sock.downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
@@ -633,6 +644,8 @@ async function handleIncomingMessage(msg) {
         mimetype: msg.message.audioMessage.mimetype,
         filename: msg.message.audioMessage.fileName || 'audio.ogg'
       };
+      
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.audioMessage);
       
       try {
         const buffer = await sock.downloadMediaMessage(msg);
@@ -650,6 +663,8 @@ async function handleIncomingMessage(msg) {
         filename: msg.message.documentMessage.fileName || 'document'
       };
       
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.documentMessage);
+      
       try {
         const buffer = await sock.downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
@@ -665,6 +680,8 @@ async function handleIncomingMessage(msg) {
         filename: 'sticker.webp'
       };
       
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.stickerMessage);
+      
       try {
         const buffer = await sock.downloadMediaMessage(msg);
         tempMessageData.data.data = buffer.toString('base64');
@@ -679,17 +696,38 @@ async function handleIncomingMessage(msg) {
         longitude: msg.message.locationMessage.degreesLongitude,
         description: msg.message.locationMessage.name || ''
       };
+      
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.locationMessage);
     } else if (msg.message.contactMessage) {
       tempMessageData.type = 'contact';
       tempMessageData.data = {
         vcard: msg.message.contactMessage.vcard
       };
+      
+      tempMessageData.isForwarded = isMessageForwarded(msg.message.contactMessage);
+    } else if (msg.message.protocolMessage) {
+      // Manejar mensajes de protocolo (álbumes, reacciones, etc.)
+      if (msg.message.protocolMessage.type === 14) { // Tipo 14 es para álbumes
+        tempMessageData.type = 'album';
+        tempMessageData.body = '';
+        tempMessageData.hasMedia = true;
+        tempMessageData.data = {
+          media: [],
+          caption: ''
+        };
+        
+        tempMessageData.isForwarded = isMessageForwarded(msg.message.protocolMessage);
+      } else {
+        // Otros tipos de protocolMessage no soportados
+        logger.debug(`[IGNORED] ProtocolMessage tipo ${msg.message.protocolMessage.type} ignorado de ${tempMessageData.phoneNumber}`);
+        return;
+      }
     } else {
       // Mensaje de tipo no soportado
       const unsupportedTypes = Object.keys(msg.message).filter(key => 
         !['conversation', 'extendedTextMessage', 'imageMessage', 'videoMessage', 
           'audioMessage', 'documentMessage', 'stickerMessage', 'locationMessage', 
-          'contactMessage'].includes(key)
+          'contactMessage', 'protocolMessage'].includes(key)
       );
       
       logger.warn(`[UNSUPPORTED] Mensaje de tipo no soportado recibido de ${tempMessageData.phoneNumber}`);
@@ -712,7 +750,21 @@ async function handleIncomingMessage(msg) {
     // Enviar webhook si está configurado
     if (ONMESSAGE) {
       try {
-        await axios.post(ONMESSAGE, tempMessageData);
+        // Manejar álbumes de manera especial
+        if (tempMessageData.type === 'album') {
+          // Para álbumes, enviar múltiples mensajes
+          // Por ahora, enviar un mensaje con información del álbum
+          const albumData = {
+            ...tempMessageData,
+            type: 'album',
+            media: tempMessageData.data.media || [],
+            caption: tempMessageData.data.caption || ''
+          };
+          await axios.post(ONMESSAGE, albumData);
+        } else {
+          // Para otros tipos de mensaje, enviar normalmente
+          await axios.post(ONMESSAGE, tempMessageData);
+        }
       } catch (error) {
         logger.error('Error enviando webhook ONMESSAGE:', error.message);
       }
