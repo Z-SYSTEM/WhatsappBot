@@ -1243,6 +1243,15 @@ async function handleIncomingMessage(msg) {
           isForwarded: tempMessageData.isForwarded || false
         };
         
+        // Log específico para stickers para verificar la estructura final
+        if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
+          logger.info(`[WEBHOOK] STICKER - webhookData.data: ${JSON.stringify(webhookData.data)}`);
+          logger.info(`[WEBHOOK] STICKER - webhookData.data.data existe: ${!!webhookData.data.data}`);
+          if (webhookData.data.data) {
+            logger.info(`[WEBHOOK] STICKER - webhookData.data.data longitud: ${webhookData.data.data.length} caracteres`);
+          }
+        }
+        
         // Log para verificar que los datos de media se incluyen correctamente
         if (tempMessageData.hasMedia && tempMessageData.data && tempMessageData.data.data) {
           logger.debug(`[WEBHOOK] Datos de media incluidos para ${tempMessageData.phoneNumber}, tipo: ${tempMessageData.type}, tamaño base64: ${tempMessageData.data.data.length} caracteres`);
@@ -1286,6 +1295,12 @@ async function handleIncomingMessage(msg) {
         
         // Enviar webhook para todos los tipos de mensaje
         await logOnMessageRequest(webhookData);
+        
+        // Log específico para stickers del webhook completo
+        if (tempMessageData.type === _MESSAGE_TYPE_STICKER) {
+          logger.info(`[WEBHOOK] STICKER - Enviando webhook completo: ${JSON.stringify(webhookData, null, 2)}`);
+        }
+        
         await axios.post(ONMESSAGE, webhookData, axiosConfig);
         
         logger.debug(`[WEBHOOK] Webhook enviado exitosamente para ${tempMessageData.phoneNumber}`);
