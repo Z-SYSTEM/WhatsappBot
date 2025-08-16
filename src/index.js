@@ -13,6 +13,46 @@ const Validators = require('./validators');
 const RateLimiter = require('./rate-limiter');
 require('dotenv').config();
 
+// Función para guardar logs de requests POST en onMessage
+async function logOnMessageRequest(requestData) {
+  try {
+    const logFile = path.join('logs', 'onmessage-requests.json');
+    const maxLogs = 50;
+    
+    // Leer logs existentes
+    let logs = [];
+    if (await fs.pathExists(logFile)) {
+      try {
+        const fileContent = await fs.readFile(logFile, 'utf8');
+        logs = JSON.parse(fileContent);
+      } catch (error) {
+        logger.warn('Error leyendo archivo de logs de onMessage, creando nuevo:', error.message);
+        logs = [];
+      }
+    }
+    
+    // Agregar nuevo log con timestamp
+    const newLog = {
+      timestamp: new Date().toISOString(),
+      data: requestData
+    };
+    
+    logs.push(newLog);
+    
+    // Mantener solo los últimos 50 logs
+    if (logs.length > maxLogs) {
+      logs = logs.slice(-maxLogs);
+    }
+    
+    // Guardar logs actualizados
+    await fs.writeFile(logFile, JSON.stringify(logs, null, 2));
+    
+    logger.debug(`[ONMESSAGE_LOG] Request guardado en logs (total: ${logs.length})`);
+  } catch (error) {
+    logger.error('Error guardando log de request onMessage:', error.message);
+  }
+}
+
 // Validación de variables de entorno
 const requiredEnvVars = ['BOT_NAME', 'TOKENACCESS', 'PORT'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -795,9 +835,17 @@ async function handleIncomingMessage(msg) {
             media: tempMessageData.data.media || [],
             caption: tempMessageData.data.caption || ''
           };
+          
+          // Guardar log del request
+          await logOnMessageRequest(albumData);
+          
           await axios.post(ONMESSAGE, albumData, axiosConfig);
         } else {
           // Para otros tipos de mensaje, enviar normalmente
+          
+          // Guardar log del request
+          await logOnMessageRequest(webhookData);
+          
           await axios.post(ONMESSAGE, webhookData, axiosConfig);
         }
         
@@ -833,6 +881,9 @@ async function handleCall(json) {
 
     if (ONMESSAGE) {
       try {
+        // Guardar log del request
+        await logOnMessageRequest(tempMessageData);
+        
         await axios.post(ONMESSAGE, tempMessageData);
         logger.info(`Llamada enviada a webhook: ${tempMessageData.data.status} de ${tempMessageData.phoneNumber}`);
       } catch (error) {
