@@ -159,8 +159,10 @@ class RateLimiter {
       // Normalizar IP para mejor legibilidad
       ip = this.normalizeIP(ip);
 
-      // Log del request
-      logger.info(`[REQUEST] ${req.method} ${req.path} from IP ${ip}`);
+      // Log del request con información adicional
+      const isLocalhost = ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
+      const logLevel = isLocalhost ? 'debug' : 'info';
+      logger[logLevel](`[REQUEST] ${req.method} ${req.path} from IP ${ip}${isLocalhost ? ' (internal)' : ' (external)'}`);
 
       const result = this.checkRateLimit(ip);
 

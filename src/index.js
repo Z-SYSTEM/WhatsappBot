@@ -985,8 +985,8 @@ async function healthCheck() {
   }
 }
 
-// Configurar cron job para health check - Reducido a cada 2 minutos para reducir uso de memoria
-cron.schedule(`0 */2 * * * *`, healthCheck);
+// Configurar cron job para health check - Reducido a cada 5 minutos para reducir ruido
+cron.schedule(`0 */5 * * * *`, healthCheck);
 
 // Configurar Express
 const app = express();
@@ -1003,6 +1003,24 @@ setInterval(() => {
 
 // Endpoint de health check
 app.get('/api/test', authenticateToken, (req, res) => {
+  // Log adicional para requests externos (solo una vez por minuto por IP)
+  const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+  const isLocalhost = clientIP === '127.0.0.1' || clientIP === '::1' || clientIP === 'localhost';
+  
+  if (!isLocalhost) {
+    const now = Date.now();
+    const lastLogKey = `health_check_${clientIP}`;
+    
+    if (!global.lastHealthCheckLog || !global.lastHealthCheckLog[lastLogKey] || 
+        (now - global.lastHealthCheckLog[lastLogKey]) > 60000) { // 1 minuto
+      
+      if (!global.lastHealthCheckLog) global.lastHealthCheckLog = {};
+      global.lastHealthCheckLog[lastLogKey] = now;
+      
+      logger.info(`[HEALTH_CHECK] External health check from ${clientIP} - User-Agent: ${req.headers['user-agent'] || 'Unknown'}`);
+    }
+  }
+  
   res.json({
     status: 'ok',
     bot_name: BOT_NAME,
@@ -1019,6 +1037,16 @@ app.get('/api/rate-limit-stats', authenticateToken, (req, res) => {
   const stats = rateLimiter.getStats();
   res.json({
     rate_limit_stats: stats,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Endpoint para ver información de health checks
+app.get('/api/health-info', authenticateToken, (req, res) => {
+  const healthStats = healthChecker.getStats();
+  res.json({
+    health_checker: healthStats,
+    bot_status: botStatus,
     timestamp: new Date().toISOString()
   });
 });
