@@ -1228,33 +1228,99 @@ async function handleIncomingMessage(msg) {
 // Función para manejar llamadas
 async function handleCall(json) {
   try {
-    // Reutilizar objeto para evitar allocations
-    tempMessageData.phoneNumber = json[0].id.replace('@c.us', '').replace('@s.whatsapp.net', '');
-    tempMessageData.type = _MESSAGE_TYPE_CALL;
-    tempMessageData.from = json[0].id;
-    tempMessageData.id = `call_${Date.now()}`;
-    tempMessageData.timestamp = Math.floor(Date.now() / 1000);
-    tempMessageData.body = 'Llamada entrante';
-    tempMessageData.hasMedia = false;
-    tempMessageData.data = {
-      status: json[0].status,
-      duration: json[0].duration || 0
-    };
-
-    if (ONMESSAGE) {
-      try {
-        // Guardar log del request
-        await logOnMessageRequest(tempMessageData);
-        
-        await axios.post(ONMESSAGE, tempMessageData);
-        logger.info(`Llamada enviada a webhook: ${tempMessageData.data.status} de ${tempMessageData.phoneNumber}`);
-      } catch (error) {
-        logger.error('Error enviando webhook de llamada:', error.message);
-      }
+    // Verificar que json sea un array y tenga elementos
+    if (!Array.isArray(json) || json.length === 0) {
+      return;
     }
 
+    const callData = json[0];
+    
+    // Debug: mostrar información básica de la llamada
+    logger.debug(`[CALL_DEBUG] Status: ${callData.status}, ID: ${callData.id}, from: ${callData.from}`);
+    
+    // Reutilizar objeto para evitar allocations
+    tempMessageData.phoneNumber = callData.from.replace('@c.us', '').replace('@s.whatsapp.net', '');
+    tempMessageData.type = _MESSAGE_TYPE_CALL;
+    tempMessageData.from = callData.from;
+    tempMessageData.id = `call_${Date.now()}`;
+    tempMessageData.timestamp = Math.floor(Date.now() / 1000);
+    tempMessageData.body = 'Llamada entrante rechazada automáticamente';
+    tempMessageData.hasMedia = false;
+    tempMessageData.data = {
+      status: callData.status || 'offer',
+      duration: callData.duration || 0,
+      callId: callData.id,
+      callType: callData.isVideo ? 'video' : 'voice',
+      fromMe: false, // Las llamadas entrantes nunca son fromMe
+      timestamp: callData.date ? Math.floor(callData.date.getTime() / 1000) : Math.floor(Date.now() / 1000),
+      isVideo: callData.isVideo || false,
+      isGroup: callData.isGroup || false
+    };
+
+    // Solo procesar llamadas de tipo 'offer' (inicio de llamada)
+    if (tempMessageData.data.status === 'offer') {
+      logger.info(`[CALL] Llamada entrante de ${tempMessageData.phoneNumber}, rechazando automáticamente`);
+      
+      try {
+        // Debug: verificar estado del socket
+        logger.debug(`[CALL_DEBUG] Socket disponible: ${!!sock}, rejectCall: ${sock && typeof sock.rejectCall === 'function'}`);
+        
+        // Rechazar la llamada usando la función correcta de Baileys
+        if (sock && typeof sock.rejectCall === 'function') {
+          await sock.rejectCall(callData.id, callData.from);
+          logger.info(`[CALL] Llamada rechazada exitosamente de ${tempMessageData.phoneNumber}`);
+        } else {
+          logger.warn('[CALL] Función rejectCall no disponible');
+          // Intentar método alternativo
+          if (sock && typeof sock.query === 'function') {
+            const stanza = {
+              tag: 'call',
+              attrs: {
+                from: sock.authState?.creds?.me?.id,
+                to: callData.from,
+              },
+              content: [{
+                tag: 'reject',
+                attrs: {
+                  'call-id': callData.id,
+                  'call-creator': callData.from,
+                  count: '0',
+                },
+                content: undefined,
+              }],
+            };
+            await sock.query(stanza);
+            logger.info(`[CALL] Llamada rechazada usando método alternativo de ${tempMessageData.phoneNumber}`);
+          }
+        }
+      } catch (rejectError) {
+        logger.error('[CALL] Error rechazando llamada:', rejectError.message);
+      }
+
+      // Enviar webhook solo para llamadas rechazadas
+      if (ONMESSAGE) {
+        try {
+          await logOnMessageRequest(tempMessageData);
+          
+          const axiosConfig = {
+            timeout: 10000,
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'WhatsApp-Bot/1.0'
+            }
+          };
+          
+          await axios.post(ONMESSAGE, tempMessageData, axiosConfig);
+          logger.info(`[CALL] Webhook enviado: llamada rechazada de ${tempMessageData.phoneNumber}`);
+        } catch (error) {
+          logger.error('[CALL] Error enviando webhook:', error.message);
+        }
+      }
+    }
+    // Ignorar otros tipos de llamada (ringing, terminate, etc.) para reducir logs
+
   } catch (error) {
-    logger.error('Error procesando llamada:', error.message);
+    logger.error('[CALL] Error procesando llamada:', error.message);
   }
 }
 
