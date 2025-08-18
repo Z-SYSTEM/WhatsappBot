@@ -164,7 +164,6 @@ const baileysLogger = {
 const BOT_NAME = process.env.BOT_NAME;
 const TOKENACCESS = process.env.TOKENACCESS;
 const PORT = process.env.PORT || 4002;
-const ONDOWN = process.env.ONDOWN;
 const ONMESSAGE = process.env.ONMESSAGE;
 const FCM_DEVICE_TOKEN = process.env.FCM_DEVICE_TOKEN;
 const HEALTH_CHECK_INTERVAL_SECONDS = parseInt(process.env.HEALTH_CHECK_INTERVAL_SECONDS) || 30;
@@ -685,18 +684,6 @@ async function connectToWhatsApp() {
           await handleRetry('connection_closed', lastDisconnect?.error);
         } else {
           logger.error('[CONNECT] Conexión cerrada por logout del usuario - No se reconectará');
-          if (ONDOWN) {
-            try {
-              await axios.post(ONDOWN, {
-                bot_name: BOT_NAME,
-                status: 'logged_out',
-                reason: 'user_logged_out',
-                timestamp: new Date().toISOString()
-              });
-            } catch (error) {
-              logger.error('[CONNECT] Error enviando webhook ONDOWN:', error.message);
-            }
-          }
           process.exit(1);
         }
       } else if (connection === 'open') {

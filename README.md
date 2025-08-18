@@ -4,16 +4,59 @@ Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST 
 
 ## Características
 
-- ✅ Conexión automática a WhatsApp Web
-- ✅ API REST para envío de mensajes
-- ✅ Soporte para múltiples tipos de contenido (texto, imágenes, PDFs, contactos)
-- ✅ Sistema de autenticación por token
-- ✅ Rate limiting configurable
-- ✅ Health checks automáticos
-- ✅ Sistema de logs con rotación
-- ✅ Reconexión automática
-- ✅ Validación de datos de entrada
+### **Características Principales**
+- ✅ Conexión automática a WhatsApp Web usando Baileys
+- ✅ API REST completa para envío de mensajes y gestión
+- ✅ Sistema de autenticación por token Bearer
+- ✅ Rate limiting configurable con bloqueo de IPs
+- ✅ Health checks automáticos cada 5 minutos
+- ✅ Sistema de logs avanzado con rotación diaria y compresión
+- ✅ Reconexión automática inteligente con backoff exponencial
+- ✅ Validación robusta de datos de entrada
 - ✅ Notificaciones FCM (opcional)
+
+### **Gestión de Sesiones**
+- ✅ Sistema de validación de sesiones al inicio
+- ✅ Backup automático de sesiones con rotación
+- ✅ Restauración automática desde backup si la sesión es inválida
+- ✅ Limpieza de sesiones corruptas con respaldo
+- ✅ Detección de errores "Bad MAC" y manejo automático
+- ✅ Prevención de pérdida de mensajes por sesiones inválidas
+
+### **Tipos de Mensajes Soportados**
+- ✅ Mensajes de texto (conversación y texto extendido)
+- ✅ Imágenes (con caption y descarga automática)
+- ✅ Videos (con caption y descarga automática)
+- ✅ Audios (con descarga automática)
+- ✅ Documentos/PDFs (con descarga automática)
+- ✅ Ubicaciones (coordenadas GPS)
+- ✅ Contactos (vCard y objetos de contacto)
+- ✅ Álbumes de imágenes (agrupación automática)
+- ✅ Llamadas (rechazo automático)
+
+### **Funcionalidades Avanzadas**
+- ✅ Manejo de álbumes con timeout y agrupación automática
+- ✅ Detección de mensajes reenviados
+- ✅ Prevención de duplicados con tracking de IDs
+- ✅ Descarga automática de medios en base64
+- ✅ Webhooks configurables para mensajes entrantes
+- ✅ Logs detallados de requests en archivos separados
+
+### **Sistema de Monitoreo**
+- ✅ Health checks de memoria y conectividad
+- ✅ Métricas de rate limiting en tiempo real
+- ✅ Estadísticas de health checks
+- ✅ Monitoreo de uso de recursos del sistema
+- ✅ Detección de problemas críticos automática
+
+### **Seguridad y Robustez**
+- ✅ Manejo de errores no capturados (uncaughtException)
+- ✅ Manejo de promesas rechazadas (unhandledRejection)
+- ✅ Recuperación automática ante fallos
+- ✅ Shutdown graceful con backup forzado
+- ✅ Verificación de instancia única (prevención de conflictos)
+- ✅ Sanitización de datos de entrada
+- ✅ Validación de URLs y números de teléfono
 
 ## Requisitos
 
@@ -68,10 +111,6 @@ TOKENACCESS=tu_token_secreto_aqui
 ```env
 # URL para recibir notificaciones de mensajes entrantes
 ONMESSAGE=https://tu-servidor.com/webhook/message
-
-# URL para notificaciones cuando el bot se desconecta
-ONDOWN=https://tu-servidor.com/webhook/down
-```
 
 #### Notificaciones FCM (Opcional)
 ```env
