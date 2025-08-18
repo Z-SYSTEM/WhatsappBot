@@ -93,7 +93,9 @@ const baileysLogger = {
     'Closing stale open session for new outgoing prekey bundle',
     'Closing session: SessionEntry',
     'SessionEntry',
-    'Bot error: Closing open session'
+    'Bot error: Closing open session',
+    'Bad MAC',
+    'Failed to decrypt message'
   ],
   
   // Función para verificar si un mensaje debe ser ignorado
@@ -109,6 +111,10 @@ const baileysLogger = {
       }
       // Ignorar mensajes de cierre de sesión
       if (message.includes('Closing session')) {
+        return true;
+      }
+      // Ignorar errores de Bad MAC y decrypt
+      if (message.includes('Bad MAC') || message.includes('Failed to decrypt message')) {
         return true;
       }
     }
@@ -379,6 +385,125 @@ async function isSessionCorrupted() {
     logger.error('Error verificando sesión:', error.message);
     return true;
   }
+}
+
+// Función para verificar si la sesión es válida (nueva)
+async function isSessionValid() {
+  return new Promise(async (resolve) => {
+    try {
+      logger.info('[SESSION_VALIDATION] Verificando validez de sesión existente...');
+      
+      // Verificar si existe sesión
+      const sessionPath = 'sessions';
+      if (!await fs.pathExists(sessionPath)) {
+        logger.info('[SESSION_VALIDATION] No hay sesión existente');
+        resolve(false);
+        return;
+      }
+      
+      const files = await fs.readdir(sessionPath);
+      if (files.length === 0) {
+        logger.info('[SESSION_VALIDATION] Sesión vacía, no válida');
+        resolve(false);
+        return;
+      }
+      
+      logger.info('[SESSION_VALIDATION] Sesión encontrada, verificando conectividad...');
+      
+      // Variables para tracking
+      let connectionTimeout = null;
+      let hasConnected = false;
+      let hasBadMacError = false;
+      let tempSock = null;
+      
+      // Timeout de 30 segundos para la verificación
+      connectionTimeout = setTimeout(() => {
+        logger.warn('[SESSION_VALIDATION] Timeout de verificación alcanzado (30s)');
+        if (tempSock) {
+          tempSock.end();
+        }
+        resolve(false);
+      }, 30000);
+      
+      try {
+        // Intentar conectar con la sesión existente
+        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+        
+        // Logger temporal completo para Baileys
+        const tempLogger = {
+          trace: () => {},
+          debug: () => {},
+          info: () => {},
+          warn: (message) => {
+            // Solo detectar errores de Bad MAC
+            if (typeof message === 'string' && 
+                (message.includes('Bad MAC') || 
+                 message.includes('Failed to decrypt message'))) {
+              hasBadMacError = true;
+              logger.warn('[SESSION_VALIDATION] Error Bad MAC detectado');
+            }
+          },
+          error: (message) => {
+            // Solo detectar errores de Bad MAC
+            if (typeof message === 'string' && 
+                (message.includes('Bad MAC') || 
+                 message.includes('Failed to decrypt message'))) {
+              hasBadMacError = true;
+              logger.warn('[SESSION_VALIDATION] Error Bad MAC detectado');
+            }
+          },
+          child: function() {
+            return this;
+          }
+        };
+
+        tempSock = makeWASocket({
+          auth: state,
+          logger: tempLogger
+        });
+        
+        // Manejar eventos de conexión
+        tempSock.ev.on('connection.update', async (update) => {
+          const { connection, lastDisconnect } = update;
+          
+          if (connection === 'open') {
+            hasConnected = true;
+            logger.info('[SESSION_VALIDATION] ✅ Sesión válida - Conexión exitosa');
+            clearTimeout(connectionTimeout);
+            tempSock.end();
+            resolve(true);
+          } else if (connection === 'close') {
+            if (hasBadMacError) {
+              logger.warn('[SESSION_VALIDATION] ❌ Sesión inválida - Error Bad MAC detectado');
+              clearTimeout(connectionTimeout);
+              tempSock.end();
+              resolve(false);
+            } else {
+              logger.warn('[SESSION_VALIDATION] ❌ Sesión inválida - Conexión cerrada');
+              clearTimeout(connectionTimeout);
+              tempSock.end();
+              resolve(false);
+            }
+          }
+        });
+        
+        // Manejar credenciales
+        tempSock.ev.on('creds.update', saveCreds);
+        
+      } catch (error) {
+        logger.error('[SESSION_VALIDATION] Error durante verificación:', error.message);
+        clearTimeout(connectionTimeout);
+        if (tempSock) {
+          tempSock.end();
+        }
+        resolve(false);
+      }
+      
+    } catch (error) {
+      logger.error('[SESSION_VALIDATION] Error verificando sesión:', error.message);
+      resolve(false);
+    }
+  });
 }
 
 // Función para resetear el estado de reintentos
@@ -2177,36 +2302,72 @@ async function startServer() {
     logger.info(`Servidor iniciado en puerto ${PORT}`);
     logger.info(`Bot name: ${BOT_NAME}`);
     
-    // Verificar si la sesión está corrupta
-    isSessionCorrupted().then(corrupted => {
-      if (corrupted) {
-        logger.warn('Sesión corrupta detectada, intentando restaurar desde backup');
-        restoreSessionFromBackup().then(restored => {
-          if (!restored) {
-            logger.warn('No se pudo restaurar desde backup, se creará nueva sesión');
-          }
-          // Conectar a WhatsApp
-          connectToWhatsApp().catch(error => {
-            logger.error('[CONNECT] Error fatal conectando a WhatsApp:', error.message);
-            logger.error(`[CONNECT] Stack trace: ${error.stack}`);
-            logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
-            handleRetry('initial_connection_failed', error);
-          });
-        });
-      } else {
-        // Conectar a WhatsApp directamente
+    // Verificar si la sesión es válida (nueva lógica)
+    logger.info('[STARTUP] Iniciando verificación de sesión...');
+    
+    try {
+      const sessionValid = await isSessionValid();
+      
+      if (sessionValid) {
+        logger.info('[STARTUP] ✅ Sesión válida detectada, conectando...');
+        // Conectar a WhatsApp con la sesión válida
         connectToWhatsApp().catch(error => {
           logger.error('[CONNECT] Error fatal conectando a WhatsApp:', error.message);
           logger.error(`[CONNECT] Stack trace: ${error.stack}`);
           logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
           handleRetry('initial_connection_failed', error);
         });
+      } else {
+        logger.warn('[STARTUP] ❌ Sesión inválida detectada, intentando restaurar desde backup...');
+        
+        // Intentar restaurar desde backup
+        const restored = await restoreSessionFromBackup();
+        if (restored) {
+          logger.info('[STARTUP] ✅ Sesión restaurada desde backup, verificando validez...');
+          
+          // Verificar si la sesión restaurada es válida
+          const restoredValid = await isSessionValid();
+          if (restoredValid) {
+            logger.info('[STARTUP] ✅ Sesión restaurada es válida, conectando...');
+            connectToWhatsApp().catch(error => {
+              logger.error('[CONNECT] Error fatal conectando a WhatsApp:', error.message);
+              logger.error(`[CONNECT] Stack trace: ${error.stack}`);
+              logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
+              handleRetry('initial_connection_failed', error);
+            });
+          } else {
+            logger.warn('[STARTUP] ❌ Sesión restaurada también es inválida, limpiando y generando QR...');
+            await cleanupCorruptedSession();
+            connectToWhatsApp().catch(error => {
+              logger.error('[CONNECT] Error fatal conectando a WhatsApp:', error.message);
+              logger.error(`[CONNECT] Stack trace: ${error.stack}`);
+              logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
+              handleRetry('initial_connection_failed', error);
+            });
+          }
+        } else {
+          logger.warn('[STARTUP] ❌ No se pudo restaurar desde backup, limpiando y generando QR...');
+          await cleanupCorruptedSession();
+          connectToWhatsApp().catch(error => {
+            logger.error('[CONNECT] Error fatal conectando a WhatsApp:', error.message);
+            logger.error(`[CONNECT] Stack trace: ${error.stack}`);
+            logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
+            handleRetry('initial_connection_failed', error);
+          });
+        }
       }
-    });
+    } catch (error) {
+      logger.error('[STARTUP] Error durante verificación de sesión:', error.message);
+      // En caso de error, intentar conectar normalmente
+      connectToWhatsApp().catch(connectError => {
+        logger.error('[CONNECT] Error fatal conectando a WhatsApp:', connectError.message);
+        logger.error(`[CONNECT] Stack trace: ${connectError.stack}`);
+        logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
+        handleRetry('initial_connection_failed', connectError);
+      });
+    }
   });
 }
-
-
 
 // Iniciar la aplicación
 startServer();
@@ -2343,8 +2504,28 @@ process.on('unhandledRejection', async (reason, promise) => {
   }
 });
 
+// Función para limpiar sesión corrupta
+async function cleanupCorruptedSession() {
+  try {
+    const sessionPath = 'sessions';
+    
+    // Hacer backup de la sesión corrupta antes de eliminarla
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const corruptedBackupPath = path.join('backups', `corrupted_${timestamp}`);
+    
+    if (await fs.pathExists(sessionPath)) {
+      await fs.copy(sessionPath, corruptedBackupPath);
+      logger.info(`[SESSION_CLEANUP] Sesión corrupta respaldada en: ${corruptedBackupPath}`);
+    }
+    
+    // Eliminar sesión actual
+    await fs.remove(sessionPath);
+    await fs.ensureDir(sessionPath);
+    
+    logger.info('[SESSION_CLEANUP] Sesión corrupta eliminada');
+  } catch (error) {
+    logger.error('[SESSION_CLEANUP] Error limpiando sesión corrupta:', error.message);
+  }
+}
 
-
-
-
-
+// Función para resetear el estado de reintentos
