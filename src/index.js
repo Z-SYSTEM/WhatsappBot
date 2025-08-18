@@ -1931,24 +1931,67 @@ app.get('/api/contact', authenticateToken, async (req, res) => {
       // Intentar obtener el contacto del store
       let contactData = null;
       
-      try {
-        // Intentar obtener el contacto usando la función correcta de Baileys
-        const contacts = await sock.contactsUpsert([{ id: wid }]);
-        if (contacts && contacts.length > 0) {
-          contactData = contacts[0];
-          logger.debug(`Contact found via contactsUpsert`);
+      // Primero intentar obtener del store de contactos de Baileys
+      if (sock.store && sock.store.contacts) {
+        contactData = sock.store.contacts[wid];
+        if (contactData) {
+          logger.debug(`Contact found in sock.store.contacts`);
         }
-      } catch (upsertError) {
-        logger.debug(`contactsUpsert failed: ${upsertError.message}`);
       }
       
-      // Si no se pudo obtener con contactsUpsert, intentar del store
+      // Si no está en store.contacts, intentar en sock.contacts (versiones anteriores)
       if (!contactData && sock.contacts && sock.contacts[wid]) {
         contactData = sock.contacts[wid];
-        logger.debug(`Contact found in store`);
+        logger.debug(`Contact found in sock.contacts`);
       }
       
-      // Si aún no hay datos, crear uno básico
+      // Si aún no hay datos, intentar con contactsUpsert para forzar la obtención
+      if (!contactData) {
+        try {
+          if (typeof sock.contactsUpsert === 'function') {
+            const contacts = await sock.contactsUpsert([{ id: wid }]);
+            if (contacts && contacts.length > 0) {
+              contactData = contacts[0];
+              logger.debug(`Contact found via contactsUpsert`);
+            }
+          }
+        } catch (upsertError) {
+          logger.debug(`contactsUpsert failed: ${upsertError.message}`);
+        }
+      }
+      
+      // Si aún no hay datos, intentar obtener información básica del contacto
+      if (!contactData) {
+        try {
+          // Intentar obtener información del contacto usando getContact
+          if (typeof sock.getContact === 'function') {
+            contactData = await sock.getContact(wid);
+            if (contactData) {
+              logger.debug(`Contact found via getContact`);
+            }
+          }
+        } catch (getContactError) {
+          logger.debug(`getContact failed: ${getContactError.message}`);
+        }
+      }
+      
+      // Intentar obtener información adicional del contacto si ya tenemos datos básicos
+      if (contactData && contactData.id) {
+        try {
+          // Intentar obtener el estado del contacto
+          if (typeof sock.fetchStatus === 'function') {
+            const status = await sock.fetchStatus(wid);
+            if (status && status.status) {
+              contactData.status = status.status;
+              logger.debug(`Status fetched: ${status.status}`);
+            }
+          }
+        } catch (statusError) {
+          logger.debug(`fetchStatus failed: ${statusError.message}`);
+        }
+      }
+      
+      // Si aún no hay datos, crear uno básico pero intentar obtener pushName
       if (!contactData) {
         contactData = {
           id: wid,
@@ -1959,6 +2002,17 @@ app.get('/api/contact', authenticateToken, async (req, res) => {
         };
         logger.debug(`Contact not in store, using default data`);
       }
+      
+      // Log detallado de la información del contacto encontrada
+      logger.debug(`Contact data found:`, {
+        id: contactData?.id,
+        name: contactData?.name,
+        pushName: contactData?.pushName,
+        verifiedName: contactData?.verifiedName,
+        status: contactData?.status,
+        notify: contactData?.notify,
+        verified: contactData?.verified
+      });
       
       // Intentar obtener foto de perfil
       let profilePicUrl = null;
@@ -1977,8 +2031,31 @@ app.get('/api/contact', authenticateToken, async (req, res) => {
         return res.status(404).json({ success: false, error: 'Contacto no encontrado' });
       }
       
-      const contactName = contactData?.name || contactData?.pushName || 'Unknown';
-      logger.debug(`Resolved contact name: ${contactName}`);
+      // Determinar el nombre del contacto con mejor lógica
+      let contactName = 'Unknown';
+      
+      // Priorizar el nombre guardado en contactos
+      if (contactData?.name && contactData.name !== 'Unknown') {
+        contactName = contactData.name;
+        logger.debug(`Using saved contact name: ${contactName}`);
+      }
+      // Si no hay nombre guardado, usar pushName (nombre que el usuario estableció en WhatsApp)
+      else if (contactData?.pushName && contactData.pushName.trim() !== '') {
+        contactName = contactData.pushName;
+        logger.debug(`Using pushName: ${contactName}`);
+      }
+      // Si no hay pushName, usar verifiedName (para cuentas de negocio)
+      else if (contactData?.verifiedName && contactData.verifiedName.trim() !== '') {
+        contactName = contactData.verifiedName;
+        logger.debug(`Using verifiedName: ${contactName}`);
+      }
+      // Si no hay ningún nombre, usar el número de teléfono
+      else {
+        contactName = wid.replace('@c.us', '');
+        logger.debug(`Using phone number as name: ${contactName}`);
+      }
+      
+      logger.debug(`Final resolved contact name: ${contactName}`);
       
       const contactInfo = {
         id: wid,
