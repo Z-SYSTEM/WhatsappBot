@@ -16,11 +16,10 @@ Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST 
 - ✅ Notificaciones FCM (opcional)
 
 ### **Gestión de Sesiones**
-- ✅ Sistema de validación de sesiones al inicio
+- ✅ Conexión directa sin validaciones complejas (Baileys maneja internamente)
 - ✅ Backup automático de sesiones con rotación
-- ✅ Restauración automática desde backup si la sesión es inválida
-- ✅ Limpieza de sesiones corruptas con respaldo
-- ✅ Detección de errores "Bad MAC" y manejo automático
+- ✅ Limpieza automática de sesiones corruptas
+- ✅ Reconexión automática con limpieza de sesión si es necesario
 - ✅ Prevención de pérdida de mensajes por sesiones inválidas
 
 ### **Tipos de Mensajes Soportados**
@@ -52,11 +51,13 @@ Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST 
 ### **Seguridad y Robustez**
 - ✅ Manejo de errores no capturados (uncaughtException)
 - ✅ Manejo de promesas rechazadas (unhandledRejection)
-- ✅ Recuperación automática ante fallos
+- ✅ Recuperación automática ante fallos con limpieza de sesión
 - ✅ Shutdown graceful con backup forzado
 - ✅ Verificación de instancia única (prevención de conflictos)
 - ✅ Sanitización de datos de entrada
 - ✅ Validación de URLs y números de teléfono
+- ✅ Gestión automática con PM2 para producción
+- ✅ Scripts de limpieza y recuperación automática
 
 ## Requisitos
 
@@ -85,8 +86,22 @@ cp env.example .env
 4. Editar el archivo `.env` con tus configuraciones (ver sección de configuración)
 
 5. Ejecutar el bot:
+
+### Opción 1: Desarrollo
 ```bash
 npm run dev
+```
+
+### Opción 2: Producción con PM2 (Recomendado)
+```bash
+# Instalar PM2 globalmente
+npm install -g pm2
+
+# Iniciar con script automático
+./start.sh
+
+# O manualmente
+pm2 start ecosystem.config.js
 ```
 
 ## Configuración
@@ -311,14 +326,48 @@ El bot realiza health checks automáticos cada 30 segundos (configurable) para v
 - Último health check realizado
 - Estadísticas de rate limiting
 
+## Gestión con PM2
+
+### Comandos Básicos
+```bash
+# Ver estado del bot
+pm2 status
+
+# Ver logs en tiempo real
+pm2 logs whatsapp-bot
+
+# Reiniciar bot
+pm2 restart whatsapp-bot
+
+# Detener bot
+pm2 stop whatsapp-bot
+
+# Eliminar bot de PM2
+pm2 delete whatsapp-bot
+```
+
+### Limpiar Sesión Corrupta
+Si el bot pide QR constantemente o detecta sesión corrupta:
+
+```bash
+# Usar script automático
+./clean-session.sh
+
+# O manualmente
+pm2 stop whatsapp-bot
+rm -rf sessions
+mkdir sessions
+pm2 start ecosystem.config.js
+```
+
 ## Solución de Problemas
 
 ### Bot no se conecta
 
 1. Verificar que el archivo `.env` esté configurado correctamente
 2. Asegurar que el número de WhatsApp esté activo
-3. Revisar los logs en `logs/error.log`
-4. Eliminar la carpeta `sessions/` para forzar nueva autenticación
+3. Revisar los logs: `pm2 logs whatsapp-bot`
+4. Limpiar sesión corrupta: `./clean-session.sh`
 
 ### Error de autenticación
 
@@ -343,8 +392,14 @@ npm run dev
 # Instalar dependencias
 npm install
 
+# Iniciar con PM2 (producción)
+./start.sh
+
+# Limpiar sesión corrupta
+./clean-session.sh
+
 # Ver logs en tiempo real
-tail -f logs/app.log
+pm2 logs whatsapp-bot
 ```
 
 ### Agregar Nuevos Endpoints
