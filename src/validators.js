@@ -23,6 +23,28 @@ class Validators {
     return { valid: true, cleanPhone };
   }
 
+  // Validar ID de grupo de WhatsApp
+  static validateGroupId(groupId) {
+    if (!groupId || typeof groupId !== 'string') {
+      return { valid: false, error: 'Group ID requerido' };
+    }
+
+    // Limpiar el groupId
+    let cleanGroupId = groupId.trim();
+
+    // Si no termina en @g.us, agregarlo
+    if (!cleanGroupId.endsWith('@g.us')) {
+      cleanGroupId = `${cleanGroupId}@g.us`;
+    }
+
+    // Validar formato básico de grupo (debe contener números y guión)
+    if (!/^\d+(-\d+)?@g\.us$/.test(cleanGroupId)) {
+      return { valid: false, error: 'Formato de Group ID inválido. Debe ser algo como: 123456789-123456789@g.us' };
+    }
+
+    return { valid: true, cleanGroupId };
+  }
+
   // Validar URL
   static validateUrl(url, allowedProtocols = ['http:', 'https:']) {
     if (!url || typeof url !== 'string') {
@@ -279,6 +301,30 @@ class Validators {
       payload: {
         ...sanitizedPayload,
         phoneNumber: phoneValidation.cleanPhone
+      }
+    };
+  }
+
+  // Validar payload para obtener información de grupo
+  static validateGetGroupPayload(payload) {
+    const errors = [];
+    const sanitizedPayload = this.sanitizeInput(payload);
+
+    // Validar groupId
+    const groupValidation = this.validateGroupId(sanitizedPayload.groupId);
+    if (!groupValidation.valid) {
+      errors.push(groupValidation.error);
+    }
+
+    if (errors.length > 0) {
+      return { valid: false, errors };
+    }
+
+    return {
+      valid: true,
+      payload: {
+        ...sanitizedPayload,
+        groupId: groupValidation.cleanGroupId
       }
     };
   }

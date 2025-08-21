@@ -1,0 +1,3 @@
+healt dsp de escanear
+api para el QR si status = sesion cerrada
+contact info name siempre responde el teléfono

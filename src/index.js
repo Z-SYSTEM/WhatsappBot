@@ -604,9 +604,8 @@ async function connectToWhatsApp() {
       // Log detallado de todos los mensajes recibidos
       logger.debug(`[MESSAGE] Mensaje recibido de ${msg.key.remoteJid}, fromMe: ${msg.key.fromMe}, tipo: ${Object.keys(msg.message || {}).join(', ')}`);
       
-      // Filtrar mensajes: solo procesar mensajes de chat individual, no de grupos ni status
+      // Filtrar mensajes: procesar mensajes de chat individual y grupos, pero no status
       if (!msg.key.fromMe && msg.message && 
-          !msg.key.remoteJid.includes('@g.us') && 
           !msg.key.remoteJid.includes('@broadcast')) {
         await handleIncomingMessage(msg);
       } else if (msg.key.fromMe) {
@@ -615,8 +614,6 @@ async function connectToWhatsApp() {
         if (!messageTypes.includes('protocolMessage')) {
           logger.debug(`[IGNORED] Mensaje propio ignorado: ${msg.key.remoteJid} - ${messageTypes.join(', ')}`);
         }
-      } else if (msg.key.remoteJid.includes('@g.us')) {
-        logger.debug(`[IGNORED] Mensaje de grupo ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
       } else if (msg.key.remoteJid.includes('@broadcast')) {
         logger.debug(`[IGNORED] Mensaje de status ignorado: ${msg.key.remoteJid} - ${Object.keys(msg.message || {}).join(', ')}`);
       } else if (!msg.message) {
@@ -2112,6 +2109,151 @@ app.get('/api/contact', authenticateToken, async (req, res) => {
     
   } catch (error) {
     logger.error('Error en endpoint de contacto:', error.message);
+    res.status(500).json({ 
+      res: false, 
+      error: 'Error interno del servidor',
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para obtener información de grupos
+app.get('/api/group', authenticateToken, async (req, res) => {
+  try {
+    // Verificación del estado del bot
+    if (!botStatus.isReady) {
+      logger.warn('WhatsApp client not ready for group lookup');
+      return res.status(503).json({ 
+        res: false, 
+        error: 'WhatsApp client not connected or session closed' 
+      });
+    }
+
+    // Permitir groupId por query, body o params
+    let groupId = undefined;
+    if (req.query && req.query.groupId) {
+      groupId = req.query.groupId;
+    } else if (req.body && req.body.groupId) {
+      groupId = req.body.groupId;
+    } else if (req.params && req.params.groupId) {
+      groupId = req.params.groupId;
+    }
+    
+    // Validar y sanitizar groupId
+    const validation = Validators.validateGetGroupPayload({ groupId });
+    if (!validation.valid) {
+      logger.warn('Group validation failed:', validation.errors);
+      return res.status(400).json({ 
+        res: false, 
+        error: 'Validation failed',
+        details: validation.errors 
+      });
+    }
+
+    const { groupId: cleanGroupId } = validation.payload;
+    
+    logger.info(`Looking up group info for ${cleanGroupId}`);
+    
+    try {
+      // Obtener metadatos del grupo usando Baileys
+      logger.debug(`Attempting to get group metadata for: ${cleanGroupId}`);
+      
+      let groupMetadata = null;
+      
+      try {
+        // Obtener metadatos del grupo
+        if (typeof sock.groupMetadata === 'function') {
+          groupMetadata = await sock.groupMetadata(cleanGroupId);
+          logger.debug(`Group metadata obtained successfully`);
+        } else {
+          throw new Error('groupMetadata function not available');
+        }
+      } catch (metadataError) {
+        logger.error(`Error getting group metadata: ${metadataError.message}`);
+        throw metadataError;
+      }
+      
+      if (!groupMetadata) {
+        logger.warn(`Group not found: ${cleanGroupId}`);
+        return res.status(404).json({ success: false, error: 'Grupo no encontrado' });
+      }
+      
+      // Intentar obtener foto de perfil del grupo
+      let profilePicUrl = null;
+      try {
+        profilePicUrl = await sock.profilePictureUrl(cleanGroupId, 'image');
+        logger.debug(`Group profile picture URL obtained: ${profilePicUrl}`);
+      } catch (e) {
+        logger.debug(`No profile picture available for group ${cleanGroupId}: ${e.message}`);
+        profilePicUrl = null;
+      }
+      
+      // Procesar participantes
+      const participants = [];
+      const admins = [];
+      
+      if (groupMetadata.participants && Array.isArray(groupMetadata.participants)) {
+        for (const participant of groupMetadata.participants) {
+          const participantInfo = {
+            id: participant.id,
+            number: participant.id.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+            isAdmin: participant.admin === 'admin' || participant.admin === 'superadmin',
+            isSuperAdmin: participant.admin === 'superadmin'
+          };
+          
+          participants.push(participantInfo);
+          
+          if (participantInfo.isAdmin) {
+            admins.push(participantInfo);
+          }
+        }
+      }
+      
+      const groupInfo = {
+        id: cleanGroupId,
+        name: groupMetadata.subject || 'Sin nombre',
+        description: groupMetadata.desc || '',
+        owner: groupMetadata.owner || null,
+        creation: groupMetadata.creation || null,
+        participantsCount: participants.length,
+        participants: participants,
+        admins: admins,
+        profilePicUrl: profilePicUrl,
+        invite: groupMetadata.invite || null,
+        size: groupMetadata.size || participants.length,
+        restrict: groupMetadata.restrict || false,
+        announce: groupMetadata.announce || false
+      };
+      
+      logger.info(`Group info retrieved for ${cleanGroupId}: ${groupInfo.name} (${groupInfo.participantsCount} participants)`);
+      res.json({
+        res: true,
+        group: groupInfo
+      });
+      
+    } catch (err) {
+      logger.error(`Error fetching group info for ${cleanGroupId}: ${err.message}`);
+      logger.error(`Error stack:`, err.stack);
+      
+      // Manejar errores específicos de Baileys
+      if (err.message.includes('not-authorized')) {
+        return res.status(403).json({ success: false, error: 'No autorizado para acceder a este grupo' });
+      }
+      
+      if (err.message.includes('item-not-found') || err.message.includes('not-found')) {
+        return res.status(404).json({ success: false, error: 'Grupo no encontrado' });
+      }
+      
+      if (err.message.includes('groupMetadata is not a function')) {
+        logger.error('groupMetadata function not available in this Baileys version');
+        return res.status(500).json({ success: false, error: 'Función de grupo no disponible en esta versión de Baileys' });
+      }
+      
+      res.status(500).json({ success: false, error: 'Error interno al obtener información del grupo' });
+    }
+    
+  } catch (error) {
+    logger.error('Error en endpoint de grupo:', error.message);
     res.status(500).json({ 
       res: false, 
       error: 'Error interno del servidor',
