@@ -40,8 +40,9 @@ class Validators {
     // Validar formato básico de grupo (acepta tanto grupos normales como de Business)
     // Grupos normales: 5491160553338-1616012738@g.us (con guión)
     // Grupos Business: 120363363116366813@g.us (sin guión)
-    if (!/^[\d-]+@g\.us$/.test(cleanGroupId)) {
-      return { valid: false, error: 'Formato de Group ID inválido. Debe ser algo como: 5491160553338-1616012738@g.us o 120363363116366813@g.us' };
+    // Grupos con +: +120363322119703037@g.us
+    if (!/^\+?[\d-]+@g\.us$/.test(cleanGroupId)) {
+      return { valid: false, error: 'Formato de Group ID inválido. Debe ser algo como: 5491160553338-1616012738@g.us, 120363363116366813@g.us o +120363322119703037@g.us' };
     }
 
     return { valid: true, cleanGroupId };
