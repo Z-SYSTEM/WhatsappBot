@@ -1104,6 +1104,76 @@ async function handleIncomingMessage(msg) {
       };
       
       tempMessageData.isForwarded = isMessageForwarded(msg.message.contactMessage);
+    } else if (msg.message.contactsArrayMessage) {
+      // Manejar múltiples contactos - procesar cada uno individualmente
+      const contacts = msg.message.contactsArrayMessage.contacts || [];
+      logger.debug(`[CONTACTS] Recibidos ${contacts.length} contactos de ${tempMessageData.phoneNumber}`);
+      
+      // Procesar cada contacto individualmente
+      for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
+        
+        // Crear datos temporales para cada contacto
+        const contactMessageData = {
+          phoneNumber: tempMessageData.phoneNumber,
+          type: _MESSAGE_TYPE_CONTACT,
+          from: tempMessageData.from,
+          id: `${tempMessageData.id}_contact_${i}`,
+          timestamp: tempMessageData.timestamp,
+          body: `Contacto ${i + 1} de ${contacts.length}`,
+          hasMedia: false,
+          data: {
+            vcard: contact.vcard,
+            displayName: contact.displayName || `Contacto ${i + 1}`,
+            contactIndex: i,
+            totalContacts: contacts.length
+          },
+                     isForwarded: isMessageForwarded(msg.message.contactsArrayMessage)
+        };
+        
+        // Log del contacto individual
+        logMessage.received(contactMessageData);
+        
+        // Enviar webhook para cada contacto si está configurado
+        if (ONMESSAGE) {
+          try {
+            logger.debug(`[WEBHOOK] Enviando webhook para contacto ${i + 1}/${contacts.length} a ${ONMESSAGE}`);
+            
+            // Crear una copia limpia de los datos para evitar problemas de serialización (igual que contactos individuales)
+            const webhookData = {
+              phoneNumber: contactMessageData.phoneNumber,
+              type: contactMessageData.type,
+              from: contactMessageData.from,
+              id: contactMessageData.id,
+              timestamp: contactMessageData.timestamp,
+              body: contactMessageData.body || '',
+              hasMedia: contactMessageData.hasMedia || false,
+              data: contactMessageData.data || {},
+              isForwarded: contactMessageData.isForwarded || false
+            };
+            
+            // Verificar que los datos se pueden serializar correctamente
+            try {
+              JSON.stringify(webhookData);
+            } catch (serializeError) {
+              logger.error('Error serializando datos del webhook de contacto:', serializeError.message);
+              logger.error('Datos problemáticos:', webhookData);
+              continue; // Continuar con el siguiente contacto
+            }
+            
+            await httpClient.sendWebhook(ONMESSAGE, webhookData, logOnMessageRequest);
+            logger.debug(`[WEBHOOK] Webhook enviado exitosamente para contacto ${i + 1}/${contacts.length}`);
+          } catch (error) {
+            logger.error(`Error enviando webhook para contacto ${i + 1}/${contacts.length}:`, error.message);
+            logger.error('Error completo:', error);
+            logger.error('URL del webhook:', ONMESSAGE);
+            logger.error('Datos enviados:', JSON.stringify(contactMessageData, null, 2));
+          }
+        }
+      }
+      
+      // No continuar con el procesamiento normal ya que cada contacto se procesó individualmente
+      return;
     } else if (msg.message.protocolMessage) {
       // Manejar mensajes de protocolo (álbumes, reacciones, etc.)
       if (msg.message.protocolMessage.type === _PROTOCOL_MESSAGE_ALBUM) {
@@ -1126,7 +1196,7 @@ async function handleIncomingMessage(msg) {
       const unsupportedTypes = Object.keys(msg.message).filter(key => 
         !['conversation', 'extendedTextMessage', 'imageMessage', 'videoMessage', 
           'audioMessage', 'documentMessage', 'stickerMessage', 'locationMessage', 
-          'contactMessage', 'protocolMessage'].includes(key)
+          'contactMessage', 'contactsArrayMessage', 'protocolMessage'].includes(key)
       );
       
       logger.warn(`[UNSUPPORTED] Mensaje de tipo no soportado recibido de ${tempMessageData.phoneNumber}`);
