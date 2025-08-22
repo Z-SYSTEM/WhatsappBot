@@ -37,9 +37,9 @@ class Validators {
       cleanGroupId = `${cleanGroupId}@g.us`;
     }
 
-    // Validar formato básico de grupo (debe contener números y guión)
-    if (!/^\d+(-\d+)?@g\.us$/.test(cleanGroupId)) {
-      return { valid: false, error: 'Formato de Group ID inválido. Debe ser algo como: 123456789-123456789@g.us' };
+    // Validar formato básico de grupo (debe contener números y al menos un guión)
+    if (!/^\d+(-\d+)+@g\.us$/.test(cleanGroupId)) {
+      return { valid: false, error: 'Formato de Group ID inválido. Debe ser algo como: 5491160553338-1616012738@g.us' };
     }
 
     return { valid: true, cleanGroupId };

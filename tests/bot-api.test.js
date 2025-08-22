@@ -305,33 +305,32 @@ describe('Send - /api/send endpoint', () => {
     }
   });
 
-  // COMENTADO: El envío a grupos tiene timeout con Baileys - problema de la librería
-  // test('should send message to group successfully', async () => {
-  //   try {
-  //     console.log('🚀 Enviando mensaje al grupo: 120363321947067806@g.us');
-  //     const response = await axios.post(`${BOT_URL}/api/send`, {
-  //       message: "(mensaje de prueba, no responder3)",
-  //       phoneNumber: "120363321947067806@g.us"
-  //     }, {
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'Authorization': `Bearer ${BOT_TOKEN}`
-  //       },
-  //       timeout: 10000  // Reducir timeout para fallar más rápido
-  //     });
-  //     
-  //     console.log('✅ Respuesta recibida:', response.status, response.data);
+  test('should send message to group successfully', async () => {
+    try {
+      console.log('🚀 Enviando mensaje al grupo: 5491160553338-1616012738@g.us');
+      const response = await axios.post(`${BOT_URL}/api/send`, {
+        message: "mensaje de prueba a grupo",
+        phoneNumber: "5491160553338-1616012738@g.us"
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${BOT_TOKEN}`
+        },
+        timeout: 15000
+      });
+      
+      console.log('✅ Respuesta recibida:', response.status, response.data);
 
-  //     expect(response.status).toBe(200);
-  //     expect(response.data).toHaveProperty('status', true);
-  //   } catch (error) {
-  //     if (error.code === 'ECONNREFUSED') {
-  //       throw new Error(`Bot not running on ${BOT_URL}. Please start the bot first with: npm run dev`);
-  //     }
-  //     console.log('❌ Error en envío al grupo:', error.response?.status, error.response?.data);
-  //     throw error;
-  //   }
-  // });
+      expect(response.status).toBe(200);
+      expect(response.data).toHaveProperty('status', true);
+    } catch (error) {
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error(`Bot not running on ${BOT_URL}. Please start the bot first with: npm run dev`);
+      }
+      console.log('❌ Error en envío al grupo:', error.response?.status, error.response?.data);
+      throw error;
+    }
+  });
 
   test('should send image message successfully', async () => {
     try {
