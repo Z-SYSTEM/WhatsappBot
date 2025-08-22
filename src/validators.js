@@ -356,11 +356,23 @@ class Validators {
   static validateSendMessagePayload(payload) {
     const errors = [];
     const sanitizedPayload = this.sanitizeInput(payload);
+    let contactValidation = null;
+    let vcardValidation = null;
 
-    // Validar phoneNumber
-    const phoneValidation = this.validatePhoneNumber(sanitizedPayload.phoneNumber);
-    if (!phoneValidation.valid) {
-      errors.push(phoneValidation.error);
+    // Validar phoneNumber (puede ser número de teléfono o ID de grupo)
+    let phoneValidation;
+    if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@g.us')) {
+      // Es un ID de grupo, validar como grupo
+      phoneValidation = this.validateGroupId(sanitizedPayload.phoneNumber);
+      if (!phoneValidation.valid) {
+        errors.push(phoneValidation.error);
+      }
+    } else {
+      // Es un número de teléfono, validar como teléfono
+      phoneValidation = this.validatePhoneNumber(sanitizedPayload.phoneNumber);
+      if (!phoneValidation.valid) {
+        errors.push(phoneValidation.error);
+      }
     }
 
     // Validar message (opcional para contactos)
@@ -395,11 +407,9 @@ class Validators {
       }
     }
 
-
-
     // Validar contact
     if (sanitizedPayload.contact) {
-      const contactValidation = this.validateContact(sanitizedPayload.contact);
+      contactValidation = this.validateContact(sanitizedPayload.contact);
       if (!contactValidation.valid) {
         errors.push(`contact: ${contactValidation.errors ? contactValidation.errors.join(', ') : contactValidation.error}`);
       }
@@ -407,7 +417,7 @@ class Validators {
 
     // Validar vcard
     if (sanitizedPayload.vcard) {
-      const vcardValidation = this.validateVCard(sanitizedPayload.vcard);
+      vcardValidation = this.validateVCard(sanitizedPayload.vcard);
       if (!vcardValidation.valid) {
         errors.push(`vcard: ${vcardValidation.error}`);
       }
@@ -433,10 +443,10 @@ class Validators {
       valid: true,
       payload: {
         ...sanitizedPayload,
-        phoneNumber: phoneValidation.cleanPhone,
+        phoneNumber: phoneValidation.cleanPhone || phoneValidation.cleanGroupId || sanitizedPayload.phoneNumber,
         message: sanitizedPayload.message !== undefined ? (sanitizedPayload.message || '') : '',
-        contact: sanitizedPayload.contact ? contactValidation.contact : undefined,
-        vcard: sanitizedPayload.vcard ? vcardValidation.vcard : undefined
+        contact: sanitizedPayload.contact && contactValidation ? contactValidation.contact : undefined,
+        vcard: sanitizedPayload.vcard && vcardValidation ? vcardValidation.vcard : undefined
       }
     };
   }

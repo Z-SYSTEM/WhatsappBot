@@ -5,46 +5,15 @@ class RateLimiter {
     this.windowMs = options.windowMs || 15 * 60 * 1000; // 15 minutos por defecto
     this.maxRequests = options.maxRequests || 100; // 100 requests por ventana
     this.requests = new Map(); // IP -> { count: number, resetTime: number }
-    this.blockedIPs = new Map(); // IP -> { blockedUntil: number, reason: string }
-    this.blockDuration = options.blockDuration || 60 * 60 * 1000; // 1 hora de bloqueo
+    // ELIMINADO: Sistema de bloqueo de IPs completamente removido
   }
 
-  // Verificar si una IP está bloqueada
-  isBlocked(ip) {
-    const blocked = this.blockedIPs.get(ip);
-    if (!blocked) return false;
+  // ELIMINADO: Métodos de bloqueo de IPs completamente removidos
 
-    if (Date.now() > blocked.blockedUntil) {
-      this.blockedIPs.delete(ip);
-      logger.info(`[RATE_LIMIT] IP ${ip} unblocked - block period expired`);
-      return false;
-    }
-
-    return true;
-  }
-
-  // Bloquear una IP
-  blockIP(ip, reason = 'Rate limit exceeded') {
-    const blockedUntil = Date.now() + this.blockDuration;
-    this.blockedIPs.set(ip, { blockedUntil, reason });
-    logger.warn(`IP ${ip} blocked until ${new Date(blockedUntil).toISOString()}. Reason: ${reason}`);
-  }
-
-  // Verificar rate limit
+  // Verificar rate limit (SIN bloqueo de IPs)
   checkRateLimit(ip) {
     const now = Date.now();
     const requestData = this.requests.get(ip);
-
-    // Si la IP está bloqueada
-    if (this.isBlocked(ip)) {
-      const blocked = this.blockedIPs.get(ip);
-      return {
-        allowed: false,
-        blocked: true,
-        remainingTime: blocked.blockedUntil - now,
-        reason: blocked.reason
-      };
-    }
 
     // Si es la primera request de esta IP
     if (!requestData) {
@@ -79,15 +48,15 @@ class RateLimiter {
       resetTime: requestData.resetTime
     });
 
-    // Verificar si excede el límite
+    // Verificar si excede el límite (SOLO log, NO bloqueo)
     if (newCount > this.maxRequests) {
-      logger.warn(`[RATE_LIMIT] IP ${ip} exceeded limit: ${newCount}/${this.maxRequests} requests`);
-      this.blockIP(ip);
+      logger.warn(`[RATE_LIMIT] IP ${ip} exceeded limit: ${newCount}/${this.maxRequests} requests - returning 429 but NOT blocking IP`);
       return {
         allowed: false,
-        blocked: true,
-        remainingTime: this.blockDuration,
-        reason: 'Rate limit exceeded'
+        blocked: false, // NUNCA bloqueado
+        remaining: 0,
+        resetTime: requestData.resetTime,
+        reason: 'Rate limit exceeded (temporary)'
       };
     }
 
@@ -102,7 +71,6 @@ class RateLimiter {
   cleanup() {
     const now = Date.now();
     let cleanedRequests = 0;
-    let cleanedBlocks = 0;
     
     // Limpiar requests expirados
     for (const [ip, data] of this.requests.entries()) {
@@ -112,17 +80,9 @@ class RateLimiter {
       }
     }
 
-    // Limpiar IPs bloqueadas expiradas
-    for (const [ip, blocked] of this.blockedIPs.entries()) {
-      if (now > blocked.blockedUntil) {
-        this.blockedIPs.delete(ip);
-        cleanedBlocks++;
-      }
-    }
-
     // Log de estadísticas periódicas
-    if (this.requests.size > 0 || this.blockedIPs.size > 0) {
-      logger.info(`[RATE_LIMIT_STATS] Active requests: ${this.requests.size}, Blocked IPs: ${this.blockedIPs.size}, Cleaned: ${cleanedRequests} requests, ${cleanedBlocks} blocks`);
+    if (this.requests.size > 0) {
+      logger.info(`[RATE_LIMIT_STATS] Active requests: ${this.requests.size}, Cleaned: ${cleanedRequests} requests`);
     }
   }
 
@@ -130,10 +90,10 @@ class RateLimiter {
   getStats() {
     return {
       activeRequests: this.requests.size,
-      blockedIPs: this.blockedIPs.size,
+      blockedIPs: 0, // SIEMPRE 0 - no se bloquean IPs
       windowMs: this.windowMs,
       maxRequests: this.maxRequests,
-      blockDuration: this.blockDuration
+      blockingEnabled: false // Indicador de que el bloqueo está deshabilitado
     };
   }
 
@@ -167,14 +127,12 @@ class RateLimiter {
       const result = this.checkRateLimit(ip);
 
       if (!result.allowed) {
-        if (result.blocked) {
-          logger.warn(`Rate limit exceeded for IP ${ip}. Blocked for ${Math.round(result.remainingTime / 1000)} seconds`);
-          return res.status(429).json({
-            error: 'Too many requests',
-            message: result.reason,
-            retryAfter: Math.ceil(result.remainingTime / 1000)
-          });
-        }
+        logger.warn(`Rate limit exceeded for IP ${ip}. Returning 429 but NOT blocking IP`);
+        return res.status(429).json({
+          error: 'Too many requests',
+          message: result.reason || 'Rate limit exceeded (temporary)',
+          retryAfter: Math.ceil((result.resetTime - Date.now()) / 1000)
+        });
       }
 
       // Log del rate limit status

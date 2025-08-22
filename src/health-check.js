@@ -1,5 +1,5 @@
 const { logger, logRecovery } = require('./logger');
-const axios = require('axios');
+const HttpClient = require('./http-client');
 
 class HealthChecker {
   constructor(config) {
@@ -7,6 +7,7 @@ class HealthChecker {
     this.lastCheck = null;
     this.consecutiveFailures = 0;
     this.maxConsecutiveFailures = 3;
+    this.httpClient = new HttpClient();
   }
 
   // Verificar uso de memoria
@@ -43,18 +44,13 @@ class HealthChecker {
   // Verificar estado del bot
   async checkBotStatus() {
     try {
-      const response = await axios.get(`http://localhost:${this.config.port}/api/test`, {
-        headers: {
-          'Authorization': `Bearer ${this.config.token}`
-        },
-        timeout: 10000
-      });
+      const result = await this.httpClient.healthCheckBot(this.config.port, this.config.token);
 
-      if (response.data.status === 'ok') {
+      if (result.status === 'ok' && result.data.status === 'ok') {
         this.consecutiveFailures = 0;
         return {
           status: 'ok',
-          bot_ready: response.data.is_ready,
+          bot_ready: result.data.is_ready,
           timestamp: new Date().toISOString()
         };
       } else {
@@ -80,18 +76,18 @@ class HealthChecker {
 
   // Verificar conectividad de red
   async checkNetworkConnectivity() {
-    try {
-      // Verificar conectividad básica
-      await axios.get('https://www.google.com', { timeout: 5000 });
+    const result = await this.httpClient.checkNetworkConnectivity();
+    
+    if (result.status === 'ok') {
       return {
         status: 'ok',
-        timestamp: new Date().toISOString()
+        timestamp: result.data.timestamp
       };
-    } catch (error) {
+    } else {
       logger.warn('Problema de conectividad de red detectado');
       return {
         status: 'error',
-        error: error.message,
+        error: result.error,
         timestamp: new Date().toISOString()
       };
     }

@@ -4,7 +4,17 @@
   "description": "WhatsApp Bot usando Baileys",
   "main": "src/index.js",
   "scripts": {
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:Test": "jest --testNamePattern=\"Test - /api/test endpoint\"",
+    "test:Contact": "jest --testNamePattern=\"Contact - /api/contact endpoint\"",
+    "test:Group": "jest --testNamePattern=\"Group - /api/group endpoint\"",
+    "test:Send": "jest --testNamePattern=\"Send - /api/send endpoint\"",
+    "test:PDF": "jest --testNamePattern=\"PDF document\"",
+    "test:RateLimit": "jest --testNamePattern=\"Rate Limit - /api/rate-limit-stats endpoint\"",
+    "test:specific": "jest --testNamePattern"
   },
   "keywords": [
     "whatsapp",
@@ -27,6 +37,28 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/index.js"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ]
   }
 }

@@ -11,6 +11,7 @@ const { generateQRCode } = require('./qr-handler');
 const HealthChecker = require('./health-check');
 const Validators = require('./validators');
 const RateLimiter = require('./rate-limiter');
+const HttpClient = require('./http-client');
 require('dotenv').config();
 
 // Función para formatear timestamp en formato local
@@ -224,6 +225,9 @@ const rateLimiter = new RateLimiter({
   blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION_MS) || 15 * 60 * 1000 // 15 minutos de bloqueo (menos severo)
 });
 
+// Inicializar cliente HTTP
+const httpClient = new HttpClient();
+
 // Middleware de autenticación
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -257,15 +261,11 @@ async function sendFCMNotification(message) {
       timestamp: new Date().toISOString()
     };
 
-    const response = await axios.post('https://fcm.googleapis.com/fcm/send', tempHealthData, {
-      headers: {
-        'Authorization': `key=${FCM_DEVICE_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const result = await httpClient.sendFCMNotification(FCM_DEVICE_TOKEN, tempHealthData);
 
-    logRecovery.notification('FCM', message);
-    logger.info('Notificación FCM enviada exitosamente');
+    if (result.status === 'ok') {
+      logRecovery.notification('FCM', message);
+    }
   } catch (error) {
     logger.error('Error enviando notificación FCM:', error.message);
   }
@@ -762,18 +762,8 @@ async function processAlbum(albumId) {
       try {
         logger.debug(`[WEBHOOK] Enviando webhook de álbum a ${ONMESSAGE} - ${messages.length} imágenes de ${albumMessageData.phoneNumber}`);
         
-        // Configuración de axios para el webhook
-        const axiosConfig = {
-          timeout: 10000, // 10 segundos de timeout
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'WhatsApp-Bot/1.0'
-          }
-        };
-        
         // Enviar webhook del álbum
-        await logOnMessageRequest(albumMessageData);
-        await axios.post(ONMESSAGE, albumMessageData, axiosConfig);
+        await httpClient.sendWebhook(ONMESSAGE, albumMessageData, logOnMessageRequest);
         
         logger.debug(`[WEBHOOK] Webhook de álbum enviado exitosamente para ${albumMessageData.phoneNumber}`);
       } catch (error) {
@@ -1207,21 +1197,8 @@ async function handleIncomingMessage(msg) {
           return;
         }
         
-        // Configuración de axios para el webhook
-        const axiosConfig = {
-          timeout: 10000, // 10 segundos de timeout
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'WhatsApp-Bot/1.0'
-          }
-        };
-        
         // Enviar webhook para todos los tipos de mensaje
-        await logOnMessageRequest(webhookData);
-        
-
-        
-        await axios.post(ONMESSAGE, webhookData, axiosConfig);
+        await httpClient.sendWebhook(ONMESSAGE, webhookData, logOnMessageRequest);
         
         logger.debug(`[WEBHOOK] Webhook enviado exitosamente para ${tempMessageData.phoneNumber}`);
       } catch (error) {
@@ -1312,17 +1289,7 @@ async function handleCall(json) {
       // Enviar webhook solo para llamadas rechazadas
       if (ONMESSAGE) {
         try {
-          await logOnMessageRequest(tempMessageData);
-          
-          const axiosConfig = {
-            timeout: 10000,
-            headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'WhatsApp-Bot/1.0'
-            }
-          };
-          
-          await axios.post(ONMESSAGE, tempMessageData, axiosConfig);
+          await httpClient.sendWebhook(ONMESSAGE, tempMessageData, logOnMessageRequest);
           logger.info(`[CALL] Webhook enviado: llamada rechazada de ${tempMessageData.phoneNumber}`);
         } catch (error) {
           logger.error('[CALL] Error enviando webhook:', error.message);
@@ -1340,21 +1307,14 @@ async function handleCall(json) {
 
 // Función para descargar archivo desde URL
 async function downloadFromUrl(url, mimetype = 'image/jpeg') {
-  try {
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'WhatsApp-Bot/1.0'
-      }
-    });
-    
+  const result = await httpClient.downloadFile(url, mimetype);
+  
+  if (result.status === 'ok') {
     // Reutilizar buffer global para evitar allocations
-    tempBuffer = Buffer.from(response.data);
+    tempBuffer = result.data;
     return tempBuffer;
-  } catch (error) {
-    logger.error(`Error descargando archivo desde URL ${url}:`, error.message);
-    throw new Error(`No se pudo descargar el archivo desde la URL: ${error.message}`);
+  } else {
+    throw new Error(result.error);
   }
 }
 
@@ -1366,13 +1326,36 @@ async function sendMessage({ phone, message, type = 'text', media }) {
       return { success: false, error: 'Bot no conectado' };
     }
 
-    const jid = phone.includes('@c.us') ? phone : `${phone}@c.us`;
+    // Detectar si es un grupo (@g.us) o contacto individual (@c.us)
+    let jid;
+    if (phone.includes('@g.us') || phone.includes('@c.us')) {
+      // Ya tiene el formato correcto (grupo o contacto)
+      jid = phone;
+    } else {
+      // Es un número sin formato, agregar @c.us (contacto individual)
+      jid = `${phone}@c.us`;
+    }
+    
+    logger.info(`[SEND] Enviando mensaje tipo ${type} a ${jid}`);
 
     let sentMessage;
 
     switch (type) {
       case 'text':
-        sentMessage = await sock.sendMessage(jid, { text: message });
+        logger.info(`[SEND] Llamando sock.sendMessage para texto a ${jid}`);
+        try {
+          // Agregar timeout para evitar cuelgues indefinidos
+          sentMessage = await Promise.race([
+            sock.sendMessage(jid, { text: message }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('SendMessage timeout after 8 seconds')), 8000)
+            )
+          ]);
+          logger.info(`[SEND] sock.sendMessage completado para ${jid}`);
+        } catch (sendError) {
+          logger.error(`[SEND] Error en sock.sendMessage para ${jid}: ${sendError.message}`);
+          throw sendError;
+        }
         break;
       
       case _MESSAGE_TYPE_IMAGE:
@@ -1405,8 +1388,10 @@ async function sendMessage({ phone, message, type = 'text', media }) {
               isForwarded: false
             };
             
-            await axios.post(ONMESSAGE, webhookData, axiosConfig);
-            logger.info(`[WEBHOOK] Imagen enviada con nuevo formato: ${webhookData.phoneNumber}`);
+            const result = await httpClient.sendWebhook(ONMESSAGE, webhookData);
+            if (result.status === 'ok') {
+              logger.info(`[WEBHOOK] Imagen enviada con nuevo formato: ${webhookData.phoneNumber}`);
+            }
           }
           
         } else if (media && media.data) {
@@ -1438,8 +1423,10 @@ async function sendMessage({ phone, message, type = 'text', media }) {
               isForwarded: false
             };
             
-            await axios.post(ONMESSAGE, webhookData, axiosConfig);
-            logger.info(`[WEBHOOK] Imagen base64 enviada con nuevo formato: ${webhookData.phoneNumber}`);
+            const result = await httpClient.sendWebhook(ONMESSAGE, webhookData);
+            if (result.status === 'ok') {
+              logger.info(`[WEBHOOK] Imagen base64 enviada con nuevo formato: ${webhookData.phoneNumber}`);
+            }
           }
           
         } else {
@@ -1754,7 +1741,14 @@ app.post('/api/send', authenticateToken, async (req, res) => {
     
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        chatId = phoneNumber.substring(1) + "@c.us";
+        // Detectar si es un grupo (ya tiene @g.us) o contacto individual
+        if (phoneNumber.includes('@g.us')) {
+          // Es un grupo, usar tal como viene
+          chatId = phoneNumber;
+        } else {
+          // Es un contacto individual, agregar @c.us y quitar el +
+          chatId = phoneNumber.substring(1) + "@c.us";
+        }
         logger.info(`Looking up WhatsApp ID for ${chatId}`);
 
         // Control de destinatarios no válidos
