@@ -574,7 +574,6 @@ async function connectToWhatsApp() {
         botStatus.isReady = true;
         resetRetryState(); // Resetear contadores de reintentos
         logger.info('[CONNECT] Bot conectado exitosamente');
-        console.log(`${formatTimestamp()} info: Bot conectado exitosamente`);
         
         // Habilitar health check cuando la sesión esté abierta
         enableHealthCheck();
