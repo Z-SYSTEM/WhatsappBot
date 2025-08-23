@@ -13,17 +13,7 @@ const Validators = require('./validators');
 const HttpClient = require('./http-client');
 require('dotenv').config();
 
-// Función para formatear timestamp en formato local
-function formatTimestamp() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-}
+
 
 // Constantes para tipos de mensajes de WhatsApp
 const _PROTOCOL_MESSAGE_ALBUM = 14;
@@ -362,21 +352,7 @@ async function restoreSessionFromBackup() {
   return false;
 }
 
-// Función simplificada para verificar si existe una sesión
-async function hasExistingSession() {
-  try {
-    const sessionPath = 'sessions';
-    if (!await fs.pathExists(sessionPath)) {
-      return false;
-    }
-    
-    const files = await fs.readdir(sessionPath);
-    return files.length > 0;
-  } catch (error) {
-    logger.error('Error verificando sesión existente:', error.message);
-    return false;
-  }
-}
+
 
 // Función para resetear el estado de reintentos
 function resetRetryState() {
@@ -458,7 +434,7 @@ async function handleRetry(reason = 'unknown', error = null) {
   logger.warn(`[RETRY] Iniciando reintento ${reconnectAttempts}/${maxReconnectAttempts}`);
   logger.warn(`[RETRY] Razón: ${reason}`);
   logger.warn(`[RETRY] Fallos consecutivos: ${consecutiveFailures}/${maxConsecutiveFailures}`);
-  logger.warn(`[RETRY] Timestamp: ${formatTimestamp()}`);
+
 
   // Verificar límites
   if (reconnectAttempts > maxReconnectAttempts) {
@@ -558,7 +534,7 @@ async function connectToWhatsApp() {
         logger.warn(`[CONNECT] Razón de desconexión: ${lastDisconnect?.error?.message || 'unknown'}`);
         logger.warn(`[CONNECT] Código de estado: ${disconnectReason || 'N/A'}`);
         logger.warn(`[CONNECT] Debería reconectar: ${shouldReconnect}`);
-        logger.warn(`[CONNECT] Timestamp: ${formatTimestamp()}`);
+      
         
         // Deshabilitar health check cuando se cierra la conexión
         disableHealthCheck();
@@ -622,7 +598,7 @@ async function connectToWhatsApp() {
   } catch (error) {
     logger.error('[CONNECT] Error conectando a WhatsApp:', error.message);
     logger.error(`[CONNECT] Stack trace: ${error.stack}`);
-    logger.error(`[CONNECT] Timestamp: ${formatTimestamp()}`);
+  
     throw error;
   }
 }
@@ -1613,18 +1589,18 @@ async function sendMessage({ phone, message, type = 'text', media }) {
     }
 
     // Log simple como solicitado en todo.txt
-    console.log(`${formatTimestamp()} info: enviando mensaje a ${phone}: ${message}`);
+    logger.info(`enviando mensaje a ${phone}: ${message}`);
     
     logger.info(`[SEND] Mensaje enviado exitosamente a ${phone}: ${type}`);
     logger.debug(`[SEND] Message ID: ${sentMessage.key.id}`);
-    logger.debug(`[SEND] Timestamp: ${formatTimestamp()}`);
+  
     logMessage.sent({ phoneNumber: phone, type: type });
     return { success: true, messageId: sentMessage.key.id };
 
   } catch (error) {
     logger.error(`[SEND] Error enviando mensaje a ${phone}: ${error.message}`);
     logger.error(`[SEND] Tipo de mensaje: ${type}`);
-    logger.error(`[SEND] Timestamp: ${formatTimestamp()}`);
+  
     logger.error(`[SEND] Stack trace: ${error.stack}`);
     logMessage.failed({ phoneNumber: phone, type: type }, error);
     return { success: false, error: error.message };
