@@ -139,14 +139,7 @@ FCM_DEVICE_TOKEN=tu_fcm_device_token_aqui
 HEALTH_CHECK_INTERVAL_SECONDS=30
 ```
 
-#### Rate Limiting
-```env
-# Máximo número de requests por ventana de tiempo
-RATE_LIMIT_MAX_REQUESTS=200
 
-# Duración del bloqueo en milisegundos (1 hora = 3600000)
-RATE_LIMIT_BLOCK_DURATION_MS=3600000
-```
 
 ## API Endpoints
 

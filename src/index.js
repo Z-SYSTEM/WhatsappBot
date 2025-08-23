@@ -10,7 +10,6 @@ const { logger, logMessage, logRecovery, cleanupOldLogs } = require('./logger');
 const { generateQRCode } = require('./qr-handler');
 const HealthChecker = require('./health-check');
 const Validators = require('./validators');
-const RateLimiter = require('./rate-limiter');
 const HttpClient = require('./http-client');
 require('dotenv').config();
 
@@ -216,13 +215,6 @@ let restartCount = 0;
 const healthChecker = new HealthChecker({
   port: PORT,
   token: TOKENACCESS
-});
-
-// Inicializar sistemas de seguridad
-const rateLimiter = new RateLimiter({
-  windowMs: 60 * 1000, // 1 minuto fijo
-  maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 300, // 300 requests por minuto (más permisivo)
-  blockDuration: parseInt(process.env.RATE_LIMIT_BLOCK_DURATION_MS) || 15 * 60 * 1000 // 15 minutos de bloqueo (menos severo)
 });
 
 // Inicializar cliente HTTP
@@ -1714,14 +1706,6 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Middlewares de seguridad
-app.use(rateLimiter.middleware());
-
-// Limpiar datos expirados del rate limiter cada 5 minutos
-setInterval(() => {
-  rateLimiter.cleanup();
-}, 5 * 60 * 1000);
-
 // Endpoint de health check
 app.get('/api/test', authenticateToken, (req, res) => {
   // Log adicional para requests externos (solo una vez por minuto por IP)
@@ -1759,14 +1743,7 @@ app.get('/api/test', authenticateToken, (req, res) => {
   });
 });
 
-// Endpoint para ver estadísticas del rate limiter
-app.get('/api/rate-limit-stats', authenticateToken, (req, res) => {
-  const stats = rateLimiter.getStats();
-  res.json({
-    rate_limit_stats: stats,
-    timestamp: new Date().toISOString()
-  });
-});
+
 
 // Endpoint para ver información de health checks
 app.get('/api/health-info', authenticateToken, (req, res) => {

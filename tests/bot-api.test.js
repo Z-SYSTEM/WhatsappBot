@@ -574,48 +574,4 @@ describe('Send - /api/send endpoint', () => {
   });
 });
 
-describe('Rate Limit - /api/rate-limit-stats endpoint', () => {
-  test('should return rate limit stats with NO blocked IPs', async () => {
-    try {
-      const response = await axios.get(`${BOT_URL}/api/rate-limit-stats`, {
-        headers: {
-          'Authorization': `Bearer ${BOT_TOKEN}`
-        }
-      });
 
-      expect(response.status).toBe(200);
-      expect(response.data).toHaveProperty('rate_limit_stats');
-      expect(response.data).toHaveProperty('timestamp');
-      
-      console.log('📊 Rate Limit Stats:', JSON.stringify(response.data.rate_limit_stats, null, 2));
-      
-      expect(response.data.rate_limit_stats).toHaveProperty('activeRequests');
-      expect(response.data.rate_limit_stats).toHaveProperty('blockedIPs');
-      expect(response.data.rate_limit_stats).toHaveProperty('windowMs');
-      expect(response.data.rate_limit_stats).toHaveProperty('maxRequests');
-      
-      // VERIFICAR: NO se bloquean IPs (siempre 0)
-      expect(response.data.rate_limit_stats.blockedIPs).toBe(0);
-      
-      // Verificar configuración de rate limiting
-      expect(response.data.rate_limit_stats.windowMs).toBe(60000); // 1 minuto
-      expect(response.data.rate_limit_stats.maxRequests).toBe(300); // 300 requests por minuto
-      
-    } catch (error) {
-      if (error.code === 'ECONNREFUSED') {
-        throw new Error(`Bot not running on ${BOT_URL}. Please start the bot first with: npm run dev`);
-      }
-      throw error;
-    }
-  });
-
-  test('should reject request without token', async () => {
-    try {
-      await axios.get(`${BOT_URL}/api/rate-limit-stats`);
-      throw new Error('Should have thrown an error');
-    } catch (error) {
-      expect(error.response.status).toBe(401);
-      expect(error.response.data).toHaveProperty('error', 'Token inválido');
-    }
-  });
-});
