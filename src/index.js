@@ -1393,8 +1393,12 @@ async function sendMessage({ phone, message, type = 'text', media }) {
       // Ya tiene el formato correcto (grupo o contacto)
       jid = phone;
     } else {
-      // Es un número sin formato, agregar @c.us (contacto individual)
-      jid = `${phone}@c.us`;
+      // Es un número sin formato, solo quitar el + si es el primer carácter y agregar @c.us
+      let cleanPhone = phone;
+      if (cleanPhone.startsWith('+')) {
+        cleanPhone = cleanPhone.substring(1);
+      }
+      jid = `${cleanPhone}@c.us`;
     }
     
     logger.info(`[SEND] Enviando mensaje tipo ${type} a ${jid}`);
@@ -1792,8 +1796,12 @@ app.post('/api/send', authenticateToken, async (req, res) => {
           // Es un grupo, usar tal como viene
           chatId = phoneNumber;
         } else {
-          // Es un contacto individual, agregar @c.us y quitar el +
-          chatId = phoneNumber.substring(1) + "@c.us";
+          // Es un contacto individual, solo quitar el + si es el primer carácter y agregar @c.us
+          let cleanPhone = phoneNumber;
+          if (cleanPhone.startsWith('+')) {
+            cleanPhone = cleanPhone.substring(1);
+          }
+          chatId = cleanPhone + "@c.us";
         }
         logger.info(`Looking up WhatsApp ID for ${chatId}`);
 
