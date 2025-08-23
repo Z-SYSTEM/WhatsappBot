@@ -564,18 +564,18 @@ async function connectToWhatsApp() {
     // Manejar credenciales
     sock.ev.on('creds.update', saveCreds);
 
-    // Manejar mensajes entrantes
-    sock.ev.on('messages.upsert', async (m) => {
-      const msg = m.messages[0];
-      
-      // Log detallado de todos los mensajes recibidos
-      logger.debug(`[MESSAGE] Mensaje recibido de ${msg.key.remoteJid}, fromMe: ${msg.key.fromMe}, tipo: ${Object.keys(msg.message || {}).join(', ')}`);
-      
-      // Filtrar mensajes: procesar mensajes de chat individual y grupos, pero no status
-      if (!msg.key.fromMe && msg.message && 
-          !msg.key.remoteJid.includes('@broadcast')) {
-        await handleIncomingMessage(msg);
-      } else if (msg.key.fromMe) {
+         // Manejar mensajes entrantes
+     sock.ev.on('messages.upsert', async (m) => {
+       const msg = m.messages[0];
+       
+       // Log detallado de todos los mensajes recibidos
+       logger.debug(`[MESSAGE] Mensaje recibido de ${msg.key.remoteJid}, fromMe: ${msg.key.fromMe}, tipo: ${Object.keys(msg.message || {}).join(', ')}`);
+       
+       // Filtrar mensajes: procesar mensajes de chat individual y grupos, pero no status
+       if (!msg.key.fromMe && msg.message && 
+           !msg.key.remoteJid.includes('@broadcast')) {
+         await handleIncomingMessage(msg);
+       } else if (msg.key.fromMe) {
         // Solo loggear mensajes propios que no sean protocolMessage (mensajes internos de WhatsApp)
         const messageTypes = Object.keys(msg.message || {});
         if (!messageTypes.includes('protocolMessage')) {
@@ -778,7 +778,7 @@ async function handleIncomingMessage(msg) {
     // Reutilizar objeto para evitar allocations
     tempMessageData.phoneNumber = msg.key.remoteJid.replace('@c.us', '').replace('@s.whatsapp.net', '');
     tempMessageData.type = _MESSAGE_TYPE_CHAT;
-    tempMessageData.from = msg.key.remoteJid;
+    tempMessageData.from = msg.key.participant || msg.key.remoteJid;
     tempMessageData.id = msg.key.id;
     tempMessageData.timestamp = msg.messageTimestamp;
     tempMessageData.body = '';
@@ -1377,13 +1377,10 @@ async function sendMessage({ phone, message, type = 'text', media }) {
       jid = `${cleanPhone}@c.us`;
     }
     
-    logger.info(`[SEND] Enviando mensaje tipo ${type} a ${jid}`);
-
     let sentMessage;
 
     switch (type) {
       case 'text':
-        logger.info(`[SEND] Llamando sock.sendMessage para texto a ${jid}`);
         try {
           // Agregar timeout para evitar cuelgues indefinidos
           sentMessage = await Promise.race([
@@ -1392,9 +1389,8 @@ async function sendMessage({ phone, message, type = 'text', media }) {
               setTimeout(() => reject(new Error('SendMessage timeout after 8 seconds')), 8000)
             )
           ]);
-          logger.info(`[SEND] sock.sendMessage completado para ${jid}`);
         } catch (sendError) {
-          logger.error(`[SEND] Error en sock.sendMessage para ${jid}: ${sendError.message}`);
+          logger.error(`[SEND] Error enviando texto a ${jid}: ${sendError.message}`);
           throw sendError;
         }
         break;
@@ -1588,20 +1584,18 @@ async function sendMessage({ phone, message, type = 'text', media }) {
         throw new Error(`Tipo de mensaje no soportado: ${type}`);
     }
 
-    // Log simple como solicitado en todo.txt
-    logger.info(`enviando mensaje a ${phone}: ${message}`);
-    
-    logger.info(`[SEND] Mensaje enviado exitosamente a ${phone}: ${type}`);
+    // Log simple como solicitado
+    logger.info(`[SEND] Mensaje enviado a ${phone}: ${message}`);
     logger.debug(`[SEND] Message ID: ${sentMessage.key.id}`);
   
     logMessage.sent({ phoneNumber: phone, type: type });
     return { success: true, messageId: sentMessage.key.id };
 
   } catch (error) {
-    logger.error(`[SEND] Error enviando mensaje a ${phone}: ${error.message}`);
-    logger.error(`[SEND] Tipo de mensaje: ${type}`);
-  
-    logger.error(`[SEND] Stack trace: ${error.stack}`);
+    logger.error(`[SEND] Error enviando ${type} a ${phone}: ${error.message}`);
+    if (error.stack) {
+      logger.debug(`[SEND] Stack trace: ${error.stack}`);
+    }
     logMessage.failed({ phoneNumber: phone, type: type }, error);
     return { success: false, error: error.message };
   }
@@ -1864,14 +1858,12 @@ app.post('/api/send', authenticateToken, async (req, res) => {
 
         } else if (message) {
           sendData.type = 'text';
-          logger.info(`Sending text message to ${chatId}: ${message}`);
         }
 
         // Enviar mensaje directamente
         const result = await sendMessage(sendData);
         
         if (result.success) {
-          logger.info(`Message sent to ${chatId}`);
           return res.json({ status: true });
         } else {
           throw new Error(result.error || 'Unknown error');
