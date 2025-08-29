@@ -31,7 +31,7 @@ Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST 
 - ✅ Ubicaciones (coordenadas GPS)
 - ✅ Contactos (vCard y objetos de contacto)
 - ✅ Álbumes de imágenes (agrupación automática)
-- ✅ Llamadas (rechazo automático)
+- ✅ Llamadas (aceptación/rechazo configurable)
 
 ### **Funcionalidades Avanzadas**
 - ✅ Manejo de álbumes con timeout y agrupación automática
@@ -137,6 +137,12 @@ FCM_DEVICE_TOKEN=tu_fcm_device_token_aqui
 ```env
 # Intervalo en segundos para health checks
 HEALTH_CHECK_INTERVAL_SECONDS=30
+```
+
+#### Gestión de Llamadas
+```env
+# Aceptar llamadas (TRUE para aceptar, FALSE para rechazar automáticamente)
+ACCEPT_CALL=FALSE
 ```
 
 
@@ -302,6 +308,28 @@ El sistema genera logs en el directorio `logs/` con rotación diaria:
 - **Rate Limiting**: Protección contra spam (200 requests/minuto por IP)
 - **Validación**: Sanitización y validación de todos los datos de entrada
 - **Logs**: Registro de todas las operaciones para auditoría
+
+## Gestión de Llamadas
+
+El bot puede configurarse para manejar llamadas entrantes de dos formas:
+
+### Configuración por Defecto
+- **ACCEPT_CALL=FALSE**: Las llamadas se rechazan automáticamente (comportamiento por defecto)
+- **ACCEPT_CALL=TRUE**: Las llamadas se aceptan automáticamente
+
+### Comportamiento
+- **Llamadas de Voz y Video**: Ambas se manejan según la configuración
+- **Webhooks**: Se envían notificaciones tanto para llamadas aceptadas como rechazadas
+- **Logs**: Se registran todas las acciones de llamadas con detalles del remitente
+
+### Ejemplo de Configuración
+```env
+# Para rechazar todas las llamadas (por defecto)
+ACCEPT_CALL=FALSE
+
+# Para aceptar todas las llamadas
+ACCEPT_CALL=TRUE
+```
 
 ## Monitoreo
 

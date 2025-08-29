@@ -113,26 +113,20 @@ const baileysLogger = {
   
   // Métodos del logger que filtran mensajes
   trace: function(message) {
-    if (!this.shouldIgnore(message)) {
-      // No hacer nada para trace
-    }
+    // No mostrar trace - demasiado detallado
   },
   
   debug: function(message) {
-    if (!this.shouldIgnore(message)) {
-      // No hacer nada para debug
-    }
+    // No mostrar debug - demasiado detallado
   },
   
   info: function(message) {
-    if (!this.shouldIgnore(message)) {
-      // No hacer nada para info
-    }
+    // No mostrar info - demasiado detallado
   },
   
   warn: function(message) {
     if (!this.shouldIgnore(message)) {
-      // No hacer nada para warn
+      console.log(`[WARN] ${message}`);
     }
   },
   
@@ -140,7 +134,7 @@ const baileysLogger = {
     if (!this.shouldIgnore(message)) {
       // Solo loggear errores que no estén en la lista de ignorados
       if (typeof message === 'string' && !message.includes('Bot error:')) {
-        // No loggear errores de Baileys que no sean críticos
+        console.log(`[ERROR] ${message}`);
       }
     }
   },
@@ -157,6 +151,7 @@ const PORT = process.env.PORT || 4002;
 const ONMESSAGE = process.env.ONMESSAGE;
 const FCM_DEVICE_TOKEN = process.env.FCM_DEVICE_TOKEN;
 const HEALTH_CHECK_INTERVAL_SECONDS = parseInt(process.env.HEALTH_CHECK_INTERVAL_SECONDS) || 30;
+const ACCEPT_CALL = process.env.ACCEPT_CALL === 'TRUE';
 
 // Crear directorios necesarios
 const dirs = ['logs', 'sessions', 'backups'];
@@ -778,7 +773,7 @@ async function handleIncomingMessage(msg) {
     // Reutilizar objeto para evitar allocations
     tempMessageData.phoneNumber = msg.key.remoteJid.replace('@c.us', '').replace('@s.whatsapp.net', '');
     tempMessageData.type = _MESSAGE_TYPE_CHAT;
-    tempMessageData.from = msg.key.participant || msg.key.remoteJid;
+    tempMessageData.from = (msg.key.participant || msg.key.remoteJid).replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '');
     tempMessageData.id = msg.key.id;
     tempMessageData.timestamp = msg.messageTimestamp;
     tempMessageData.body = '';
@@ -1267,7 +1262,7 @@ async function handleCall(json) {
     // Reutilizar objeto para evitar allocations
     tempMessageData.phoneNumber = callData.from.replace('@c.us', '').replace('@s.whatsapp.net', '');
     tempMessageData.type = _MESSAGE_TYPE_CALL;
-    tempMessageData.from = callData.from;
+    tempMessageData.from = callData.from.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '');
     tempMessageData.id = `call_${Date.now()}`;
     tempMessageData.timestamp = Math.floor(Date.now() / 1000);
     tempMessageData.body = 'Llamada entrante rechazada automáticamente';
@@ -1285,49 +1280,74 @@ async function handleCall(json) {
 
     // Solo procesar llamadas de tipo 'offer' (inicio de llamada)
     if (tempMessageData.data.status === 'offer') {
-      logger.info(`[CALL] Llamada entrante de ${tempMessageData.phoneNumber}, rechazando automáticamente`);
-      
-      try {
-        // Debug: verificar estado del socket
-        logger.debug(`[CALL_DEBUG] Socket disponible: ${!!sock}, rejectCall: ${sock && typeof sock.rejectCall === 'function'}`);
+      if (ACCEPT_CALL) {
+        logger.info(`[CALL] Llamada entrante de ${tempMessageData.phoneNumber}, aceptando automáticamente (ACCEPT_CALL=TRUE)`);
         
-        // Rechazar la llamada usando la función correcta de Baileys
-        if (sock && typeof sock.rejectCall === 'function') {
-          await sock.rejectCall(callData.id, callData.from);
-          logger.info(`[CALL] Llamada rechazada exitosamente de ${tempMessageData.phoneNumber}`);
-        } else {
-          logger.warn('[CALL] Función rejectCall no disponible');
-          // Intentar método alternativo
-          if (sock && typeof sock.query === 'function') {
-            const stanza = {
-              tag: 'call',
-              attrs: {
-                from: sock.authState?.creds?.me?.id,
-                to: callData.from,
-              },
-              content: [{
-                tag: 'reject',
-                attrs: {
-                  'call-id': callData.id,
-                  'call-creator': callData.from,
-                  count: '0',
-                },
-                content: undefined,
-              }],
-            };
-            await sock.query(stanza);
-            logger.info(`[CALL] Llamada rechazada usando método alternativo de ${tempMessageData.phoneNumber}`);
+        try {
+          // Debug: verificar estado del socket
+          logger.debug(`[CALL_DEBUG] Socket disponible: ${!!sock}, acceptCall: ${sock && typeof sock.acceptCall === 'function'}`);
+          
+          // Aceptar la llamada usando la función correcta de Baileys
+          if (sock && typeof sock.acceptCall === 'function') {
+            await sock.acceptCall(callData.id, callData.from);
+            logger.info(`[CALL] Llamada aceptada exitosamente de ${tempMessageData.phoneNumber}`);
+          } else {
+            logger.warn('[CALL] Función acceptCall no disponible');
           }
+        } catch (acceptError) {
+          logger.error('[CALL] Error aceptando llamada:', acceptError.message);
         }
-      } catch (rejectError) {
-        logger.error('[CALL] Error rechazando llamada:', rejectError.message);
+        
+        // Actualizar el mensaje para webhook
+        tempMessageData.body = 'Llamada entrante aceptada automáticamente';
+      } else {
+        logger.info(`[CALL] Llamada entrante de ${tempMessageData.phoneNumber}, rechazando automáticamente (ACCEPT_CALL=FALSE)`);
+        
+        try {
+          // Debug: verificar estado del socket
+          logger.debug(`[CALL_DEBUG] Socket disponible: ${!!sock}, rejectCall: ${sock && typeof sock.rejectCall === 'function'}`);
+          
+          // Rechazar la llamada usando la función correcta de Baileys
+          if (sock && typeof sock.rejectCall === 'function') {
+            await sock.rejectCall(callData.id, callData.from);
+            logger.info(`[CALL] Llamada rechazada exitosamente de ${tempMessageData.phoneNumber}`);
+          } else {
+            logger.warn('[CALL] Función rejectCall no disponible');
+            // Intentar método alternativo
+            if (sock && typeof sock.query === 'function') {
+              const stanza = {
+                tag: 'call',
+                attrs: {
+                  from: sock.authState?.creds?.me?.id,
+                  to: callData.from,
+                },
+                content: [{
+                  tag: 'reject',
+                  attrs: {
+                    'call-id': callData.id,
+                    'call-creator': callData.from,
+                    count: '0',
+                  },
+                  content: undefined,
+                }],
+              };
+              await sock.query(stanza);
+              logger.info(`[CALL] Llamada rechazada usando método alternativo de ${tempMessageData.phoneNumber}`);
+            }
+          }
+        } catch (rejectError) {
+          logger.error('[CALL] Error rechazando llamada:', rejectError.message);
+        }
+        
+        // Actualizar el mensaje para webhook
+        tempMessageData.body = 'Llamada entrante rechazada automáticamente';
       }
 
-      // Enviar webhook solo para llamadas rechazadas
+      // Enviar webhook para llamadas aceptadas o rechazadas
       if (ONMESSAGE) {
         try {
           await httpClient.sendWebhook(ONMESSAGE, tempMessageData, logOnMessageRequest);
-          logger.info(`[CALL] Webhook enviado: llamada rechazada de ${tempMessageData.phoneNumber}`);
+          logger.info(`[CALL] Webhook enviado: llamada ${ACCEPT_CALL ? 'aceptada' : 'rechazada'} de ${tempMessageData.phoneNumber}`);
         } catch (error) {
           logger.error('[CALL] Error enviando webhook:', error.message);
         }
