@@ -1,5 +1,5 @@
 const express = require('express');
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage, Browsers } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const fs = require('fs-extra');
 const path = require('path');
@@ -387,7 +387,8 @@ function shouldRetry(error, disconnectReason) {
   const nonRetryableStatusCodes = [
     401, // Unauthorized
     403, // Forbidden
-    404  // Not Found
+    404, // Not Found
+    405  // Method Not Allowed - Posible bloqueo de IP
   ];
   
   // Verificar si es un logout del usuario
@@ -507,9 +508,12 @@ async function connectToWhatsApp() {
     
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     
+    logger.info(`[CONNECT] Usando Baileys v6.7.20 (versión estable)`);
+    
     sock = makeWASocket({
       auth: state,
-      logger: baileysLogger
+      logger: baileysLogger,
+      browser: Browsers.ubuntu('Chrome')
     });
 
     // Manejar eventos de conexión
@@ -529,6 +533,20 @@ async function connectToWhatsApp() {
         logger.warn(`[CONNECT] Razón de desconexión: ${lastDisconnect?.error?.message || 'unknown'}`);
         logger.warn(`[CONNECT] Código de estado: ${disconnectReason || 'N/A'}`);
         logger.warn(`[CONNECT] Debería reconectar: ${shouldReconnect}`);
+        
+        // Log detallado del error completo para diagnosticar bloqueos
+        if (lastDisconnect?.error) {
+          logger.warn(`[CONNECT] Error completo: ${JSON.stringify(lastDisconnect.error, null, 2)}`);
+        }
+        
+        // Detectar posible rate limiting o bloqueo de IP
+        if (disconnectReason === 405) {
+          logger.error('[CONNECT] ⚠️  ERROR 405 - Posibles causas:');
+          logger.error('[CONNECT] 1. IP bloqueada temporalmente por WhatsApp (rate limiting)');
+          logger.error('[CONNECT] 2. Demasiados intentos de conexión fallidos');
+          logger.error('[CONNECT] 3. Cambiar de IP (VPN, reiniciar router, usar datos móviles)');
+          logger.error('[CONNECT] 4. Esperar 6-24 horas antes de reintentar');
+        }
       
         
         // Deshabilitar health check cuando se cierra la conexión
