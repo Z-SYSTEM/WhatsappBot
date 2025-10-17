@@ -510,10 +510,23 @@ async function connectToWhatsApp() {
     
     logger.info(`[CONNECT] Usando Baileys v6.7.20 (versión estable)`);
     
+    // Intentar diferentes configuraciones de browser
     sock = makeWASocket({
       auth: state,
       logger: baileysLogger,
-      browser: Browsers.ubuntu('Chrome')
+      printQRInTerminal: false,
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: false,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 30000,
+      retryRequestDelayMs: 250,
+      markOnlineOnConnect: true,
+      getMessage: async (key) => {
+        return {
+          conversation: ''
+        }
+      }
     });
 
     // Manejar eventos de conexión
