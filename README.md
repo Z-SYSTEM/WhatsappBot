@@ -8,7 +8,6 @@ Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST 
 - ✅ Conexión automática a WhatsApp Web usando Baileys
 - ✅ API REST completa para envío de mensajes y gestión
 - ✅ Sistema de autenticación por token Bearer
-- ✅ Rate limiting configurable con bloqueo de IPs
 - ✅ Health checks automáticos cada 5 minutos
 - ✅ Sistema de logs avanzado con rotación diaria y compresión
 - ✅ Reconexión automática inteligente con backoff exponencial
@@ -43,7 +42,6 @@ Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST 
 
 ### **Sistema de Monitoreo**
 - ✅ Health checks de memoria y conectividad
-- ✅ Métricas de rate limiting en tiempo real
 - ✅ Estadísticas de health checks
 - ✅ Monitoreo de uso de recursos del sistema
 - ✅ Detección de problemas críticos automática
@@ -261,7 +259,6 @@ GET /api/contact?phoneNumber=+1234567890
 - `200`: Operación exitosa
 - `400`: Error de validación en los datos de entrada
 - `401`: Token de autenticación inválido o faltante
-- `429`: Rate limit excedido
 - `503`: Bot no está conectado a WhatsApp
 - `500`: Error interno del servidor
 
@@ -281,11 +278,25 @@ GET /api/contact?phoneNumber=+1234567890
 WhatsappBot/
 ├── src/
 │   ├── index.js          # Archivo principal del servidor
+│   ├── config.js         # Configuración centralizada
+│   ├── constants.js      # Constantes del proyecto
+│   ├── core/             # Clases principales
+│   │   ├── WhatsAppBot.js
+│   │   ├── WhatsAppConnection.js
+│   │   └── SessionManager.js
+│   ├── handlers/         # Manejadores de eventos
+│   │   ├── MessageHandler.js
+│   │   ├── MessageSender.js
+│   │   ├── CallHandler.js
+│   │   ├── AlbumHandler.js
+│   │   └── MediaProcessor.js
+│   ├── routes/           # Endpoints de la API
+│   ├── middleware/       # Middleware de Express
 │   ├── logger.js         # Sistema de logging
 │   ├── qr-handler.js     # Manejo de códigos QR
 │   ├── health-check.js   # Sistema de health checks
 │   ├── validators.js     # Validación de datos
-│   └── rate-limiter.js   # Control de rate limiting
+│   └── http-client.js    # Cliente HTTP
 ├── logs/                 # Archivos de log
 ├── sessions/             # Sesiones de WhatsApp
 ├── backups/              # Backups de sesiones
@@ -305,7 +316,6 @@ El sistema genera logs en el directorio `logs/` con rotación diaria:
 ## Seguridad
 
 - **Autenticación**: Todos los endpoints requieren token Bearer
-- **Rate Limiting**: Protección contra spam (200 requests/minuto por IP)
 - **Validación**: Sanitización y validación de todos los datos de entrada
 - **Logs**: Registro de todas las operaciones para auditoría
 
@@ -345,7 +355,6 @@ El bot realiza health checks automáticos cada 30 segundos (configurable) para v
 - Estado de conexión del bot
 - Número de intentos de reconexión
 - Último health check realizado
-- Estadísticas de rate limiting
 
 ## Gestión con PM2
 
@@ -395,12 +404,6 @@ pm2 start ecosystem.config.js
 1. Verificar que el token en `TOKENACCESS` sea correcto
 2. Asegurar que el header `Authorization: Bearer <token>` esté presente
 3. Verificar que el token no contenga espacios extra
-
-### Rate limit excedido
-
-1. Reducir la frecuencia de requests
-2. Aumentar `RATE_LIMIT_MAX_REQUESTS` en la configuración
-3. Esperar el tiempo de bloqueo configurado
 
 ## Desarrollo
 
