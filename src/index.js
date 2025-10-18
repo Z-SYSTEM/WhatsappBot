@@ -1,17 +1,24 @@
-const express = require('express');
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage, Browsers } = require('@whiskeysockets/baileys');
-const { Boom } = require('@hapi/boom');
-const fs = require('fs-extra');
-const path = require('path');
-const cron = require('node-cron');
-const axios = require('axios');
-const winston = require('winston');
-const { logger, logMessage, logRecovery, cleanupOldLogs } = require('./logger');
-const { generateQRCode } = require('./qr-handler');
-const HealthChecker = require('./health-check');
-const Validators = require('./validators');
-const HttpClient = require('./http-client');
-require('dotenv').config();
+import express from 'express';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, downloadMediaMessage, Browsers } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
+import fs from 'fs-extra';
+import path, { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import cron from 'node-cron';
+import axios from 'axios';
+import winston from 'winston';
+import net from 'net';
+import { logger, logMessage, logRecovery, cleanupOldLogs } from './logger.js';
+import { generateQRCode } from './qr-handler.js';
+import HealthChecker from './health-check.js';
+import Validators from './validators.js';
+import HttpClient from './http-client.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 
 
@@ -2336,9 +2343,6 @@ app.get('/api/group', authenticateToken, async (req, res) => {
 // Función para verificar si ya existe otra instancia corriendo
 async function checkExistingInstance() {
   try {
-    // Intentar hacer bind a un puerto temporal para verificar si hay otra instancia
-    const net = require('net');
-    
     return new Promise((resolve) => {
       const tempServer = net.createServer();
       
@@ -2354,16 +2358,18 @@ async function checkExistingInstance() {
       });
       
       tempServer.once('listening', () => {
-        tempServer.close();
-        logger.info('Puerto disponible, continuando con el inicio');
-        resolve();
+        // Cerrar el servidor temporal inmediatamente
+        tempServer.close(() => {
+          logger.info('Puerto disponible, continuando con el inicio');
+          resolve();
+        });
       });
       
       tempServer.listen(PORT);
     });
   } catch (error) {
     logger.error('Error en verificación de instancia única:', error.message);
-    // En caso de error, continuar
+    // En caso de error, continuar sin bloquear
   }
 }
 
@@ -2386,10 +2392,7 @@ function disableHealthCheck() {
 
 // Iniciar servidor
 async function startServer() {
-  // Verificar si ya existe otra instancia corriendo ANTES de iniciar el servidor
-  await checkExistingInstance();
-  
-  app.listen(PORT, async () => {
+  const server = app.listen(PORT, async () => {
     logger.info(`Servidor iniciado en puerto ${PORT}`);
     logger.info(`Bot name: ${BOT_NAME}`);
     
@@ -2402,6 +2405,18 @@ async function startServer() {
       logger.error('[STARTUP] Error inicial conectando a WhatsApp:', error.message);
       // Intentar reconectar automáticamente
       handleRetry('initial_connection_failed', error);
+    }
+  });
+
+  // Manejar errores del servidor
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`[SERVER] Puerto ${PORT} ya está en uso por otra instancia`);
+      logger.error('[SERVER] Cerrando esta instancia para evitar conflictos');
+      process.exit(1);
+    } else {
+      logger.error('[SERVER] Error al iniciar servidor:', err.message);
+      process.exit(1);
     }
   });
 }
@@ -2450,6 +2465,16 @@ process.on('uncaughtException', async (err) => {
   }
   
   logger.warn(`[RECOVERY] Tipo de error detectado: ${errorType}`);
+  
+  // Si el error es EADDRINUSE, significa que el puerto ya está en uso
+  // No intentar recovery, simplemente salir
+  if (errorType === 'address_in_use') {
+    logger.error('[RECOVERY] Puerto ya en uso. Cerrando aplicación...');
+    logger.error('[RECOVERY] Verifica que no haya otra instancia corriendo.');
+    process.exit(1);
+    return;
+  }
+  
   const botName = process.env.BOT_NAME || 'desconocido';
   restartCount++;
   logger.warn(`[RECOVERY] Intentando reinicio #${restartCount} para instancia: ${botName} por uncaughtException. Motivo: ${err && err.message}`);
@@ -2486,22 +2511,10 @@ process.on('uncaughtException', async (err) => {
     logger.error('[RECOVERY] Error al reiniciar bot tras uncaughtException:', e);
   }
   
-  // Si el error es crítico, reiniciar el proceso para que PM2 lo levante
-  if (err && err.message && (
-    err.message.includes('Out of memory') ||
-    err.message.includes('ECONNREFUSED') ||
-    err.message.includes('EADDRINUSE')
-  )) {
-    logger.error('[RECOVERY] Error crítico detectado, reiniciando proceso...');
-    // En lugar de salir inmediatamente, intentar limpiar y reconectar
-    try {
-      await cleanupCorruptedSession();
-      await connectToWhatsApp();
-      logger.info('[RECOVERY] Recuperación exitosa tras error crítico');
-    } catch (recoveryError) {
-      logger.error('[RECOVERY] No se pudo recuperar, reiniciando proceso...');
-      process.exit(1);
-    }
+  // Si el error es crítico (Out of memory), reiniciar el proceso
+  if (err && err.message && err.message.includes('Out of memory')) {
+    logger.error('[RECOVERY] Error crítico de memoria detectado, saliendo...');
+    process.exit(1);
   }
 });
 
@@ -2521,6 +2534,16 @@ process.on('unhandledRejection', async (reason, promise) => {
   }
   
   logger.warn(`[RECOVERY] Tipo de error detectado: ${errorType}`);
+  
+  // Si el error es EADDRINUSE, significa que el puerto ya está en uso
+  // No intentar recovery, simplemente salir
+  if (errorType === 'address_in_use') {
+    logger.error('[RECOVERY] Puerto ya en uso. Cerrando aplicación...');
+    logger.error('[RECOVERY] Verifica que no haya otra instancia corriendo.');
+    process.exit(1);
+    return;
+  }
+  
   const botName = process.env.BOT_NAME || 'desconocido';
   restartCount++;
   logger.warn(`[RECOVERY] Intentando reinicio #${restartCount} para instancia: ${botName} por unhandledRejection. Motivo: ${reason && reason.message}`);

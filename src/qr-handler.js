@@ -1,5 +1,5 @@
-const qrcode = require('qrcode-terminal');
-const { logger } = require('./logger');
+import qrcode from 'qrcode-terminal';
+import { logger } from './logger.js';
 
 // Función para generar QR code visual
 async function generateQRCode(qr) {
@@ -25,6 +25,6 @@ async function generateQRCode(qr) {
   }
 }
 
-module.exports = {
+export {
   generateQRCode
 };

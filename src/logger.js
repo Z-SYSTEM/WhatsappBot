@@ -1,7 +1,11 @@
-const winston = require('winston');
-const fs = require('fs-extra');
-require('winston-daily-rotate-file');
-const path = require('path'); // Added missing import for path
+import winston from 'winston';
+import fs from 'fs-extra';
+import 'winston-daily-rotate-file';
+import path, { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Crear directorio de logs si no existe
 fs.ensureDirSync('logs');
@@ -167,7 +171,7 @@ async function cleanupOldLogs() {
   }
 }
 
-module.exports = {
+export {
   logger,
   logMessage,
   logRecovery,

@@ -1,4 +1,4 @@
-const { logger } = require('./logger');
+import { logger } from './logger.js';
 
 class Validators {
   // Validar número de teléfono
@@ -455,4 +455,4 @@ class Validators {
   }
 }
 
-module.exports = Validators;
+export default Validators;

@@ -1,5 +1,5 @@
-const { logger, logRecovery } = require('./logger');
-const HttpClient = require('./http-client');
+import { logger, logRecovery } from './logger.js';
+import HttpClient from './http-client.js';
 
 class HealthChecker {
   constructor(config) {
@@ -144,4 +144,4 @@ class HealthChecker {
   }
 }
 
-module.exports = HealthChecker;
+export default HealthChecker;

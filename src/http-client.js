@@ -1,5 +1,5 @@
-const axios = require('axios');
-const { logger } = require('./logger');
+import axios from 'axios';
+import { logger } from './logger.js';
 
 class HttpClient {
   constructor() {
@@ -218,4 +218,4 @@ class HttpClient {
   }
 }
 
-module.exports = HttpClient;
+export default HttpClient;
