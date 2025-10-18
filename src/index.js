@@ -38,6 +38,9 @@ const _ALBUM_MAX_IMAGES = 30; // Máximo número de imágenes en un álbum
 const _PROCESSED_MESSAGES_MAX_SIZE = 1000;
 const _PROCESSED_MESSAGES_KEEP_SIZE = 500;
 
+// Versión fija de WhatsApp (solución temporal para estabilidad)
+const _WHATSAPP_VERSION = [2, 3000, 1027934701];
+
 // Set para trackear mensajes ya procesados y evitar duplicados
 const processedMessageIds = new Set();
 
@@ -516,6 +519,7 @@ async function connectToWhatsApp() {
       logger: baileysLogger,
       printQRInTerminal: false,
       browser: Browsers.ubuntu('Chrome'),
+      version: _WHATSAPP_VERSION,
       syncFullHistory: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
