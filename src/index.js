@@ -91,20 +91,21 @@ async function startServer() {
   // Verificar instancia única
   await checkExistingInstance();
   
-  // Configurar rutas
+  // Inicializar y conectar bot ANTES de configurar las rutas
+  try {
+    await initializeBot();
+  } catch (error) {
+    logger.error('[STARTUP] Error inicial conectando a WhatsApp:', error.message);
+  }
+  
+  // Configurar rutas DESPUÉS de inicializar el bot
   const authMiddleware = authenticateToken(config.tokenAccess);
   setupRoutes(app, bot, config, authMiddleware);
   
   const server = app.listen(config.port, async () => {
     logger.info(`Servidor iniciado en puerto ${config.port}`);
     logger.info(`Bot name: ${config.botName}`);
-    
-    // Inicializar y conectar bot
-    try {
-      await initializeBot();
-    } catch (error) {
-      logger.error('[STARTUP] Error inicial conectando a WhatsApp:', error.message);
-    }
+    logger.info('[STARTUP] Servidor y bot listos');
   });
 
   // Manejar errores del servidor
@@ -167,6 +168,29 @@ process.on('uncaughtException', async (err) => {
     return;
   }
   
+  // Enviar notificación FCM
+  if (config.fcmDeviceToken && bot) {
+    try {
+      const HttpClient = (await import('./http-client.js')).default;
+      const httpClient = new HttpClient();
+      await httpClient.sendFCMNotification(config.fcmDeviceToken, {
+        to: config.fcmDeviceToken,
+        notification: {
+          title: `Bot ${config.botName}`,
+          body: `Bot se colgó por uncaughtException: ${err && err.message} | Tipo: ${errorType}`,
+          priority: 'high'
+        },
+        data: {
+          bot_name: config.botName,
+          error_type: errorType,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (fcmError) {
+      logger.error('[RECOVERY] Error enviando notificación FCM:', fcmError.message);
+    }
+  }
+  
   // Intentar reconectar el bot
   try {
     if (bot) {
@@ -174,6 +198,29 @@ process.on('uncaughtException', async (err) => {
       await bot.disconnect();
       await bot.connect();
       logger.info('[RECOVERY] Bot reconectado tras uncaughtException.');
+      
+      // Notificación FCM de recuperación
+      if (config.fcmDeviceToken) {
+        try {
+          const HttpClient = (await import('./http-client.js')).default;
+          const httpClient = new HttpClient();
+          await httpClient.sendFCMNotification(config.fcmDeviceToken, {
+            to: config.fcmDeviceToken,
+            notification: {
+              title: `Bot ${config.botName}`,
+              body: `Bot fue reiniciado tras uncaughtException. | Tipo: ${errorType}`,
+              priority: 'high'
+            },
+            data: {
+              bot_name: config.botName,
+              error_type: errorType,
+              timestamp: new Date().toISOString()
+            }
+          });
+        } catch (fcmError) {
+          logger.error('[RECOVERY] Error enviando notificación FCM de recuperación:', fcmError.message);
+        }
+      }
     }
   } catch (e) {
     logger.error('[RECOVERY] Error al reiniciar bot tras uncaughtException:', e);
@@ -210,6 +257,29 @@ process.on('unhandledRejection', async (reason, promise) => {
     return;
   }
   
+  // Enviar notificación FCM
+  if (config.fcmDeviceToken && bot) {
+    try {
+      const HttpClient = (await import('./http-client.js')).default;
+      const httpClient = new HttpClient();
+      await httpClient.sendFCMNotification(config.fcmDeviceToken, {
+        to: config.fcmDeviceToken,
+        notification: {
+          title: `Bot ${config.botName}`,
+          body: `Bot se colgó por unhandledRejection: ${reason && reason.message} | Tipo: ${errorType}`,
+          priority: 'high'
+        },
+        data: {
+          bot_name: config.botName,
+          error_type: errorType,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (fcmError) {
+      logger.error('[RECOVERY] Error enviando notificación FCM:', fcmError.message);
+    }
+  }
+  
   // Intentar reconectar el bot
   try {
     if (bot) {
@@ -217,6 +287,29 @@ process.on('unhandledRejection', async (reason, promise) => {
       await bot.disconnect();
       await bot.connect();
       logger.info('[RECOVERY] Bot reconectado tras unhandledRejection.');
+      
+      // Notificación FCM de recuperación
+      if (config.fcmDeviceToken) {
+        try {
+          const HttpClient = (await import('./http-client.js')).default;
+          const httpClient = new HttpClient();
+          await httpClient.sendFCMNotification(config.fcmDeviceToken, {
+            to: config.fcmDeviceToken,
+            notification: {
+              title: `Bot ${config.botName}`,
+              body: `Bot fue reiniciado tras unhandledRejection. | Tipo: ${errorType}`,
+              priority: 'high'
+            },
+            data: {
+              bot_name: config.botName,
+              error_type: errorType,
+              timestamp: new Date().toISOString()
+            }
+          });
+        } catch (fcmError) {
+          logger.error('[RECOVERY] Error enviando notificación FCM de recuperación:', fcmError.message);
+        }
+      }
     }
   } catch (e) {
     logger.error('[RECOVERY] Error al reiniciar bot tras unhandledRejection:', e);

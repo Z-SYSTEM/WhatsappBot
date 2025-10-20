@@ -292,6 +292,39 @@ class WhatsAppConnection {
   }
 
   /**
+   * Envía notificación FCM si está configurado
+   */
+  async sendFCMNotification(message) {
+    if (!this.config.fcmDeviceToken) {
+      return;
+    }
+
+    try {
+      const httpClient = (await import('../http-client.js')).default;
+      const client = new httpClient();
+      
+      const notificationData = {
+        to: this.config.fcmDeviceToken,
+        notification: {
+          title: `Bot ${this.config.botName}`,
+          body: message,
+          priority: 'high'
+        },
+        data: {
+          bot_name: this.config.botName,
+          message: message,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      await client.sendFCMNotification(this.config.fcmDeviceToken, notificationData);
+      logRecovery.notification('FCM', message);
+    } catch (error) {
+      logger.error('[WA_CONNECTION] Error enviando notificación FCM:', error.message);
+    }
+  }
+
+  /**
    * Maneja reintentos de conexión
    */
   async handleRetry(reason = 'unknown', error = null) {
@@ -311,6 +344,11 @@ class WhatsAppConnection {
     // Verificar límites
     if (this.reconnectAttempts > this.config.maxReconnectAttempts) {
       logger.error(`[WA_CONNECTION] Máximo número de reintentos alcanzado (${this.config.maxReconnectAttempts})`);
+      
+      // Enviar notificación FCM
+      await this.sendFCMNotification(
+        `Bot ${this.config.botName} - Máximo de reintentos alcanzado después de ${this.reconnectAttempts} intentos`
+      );
       
       // Limpiar sesión y reintentar
       logger.warn('[WA_CONNECTION] Limpiando sesión y reintentando...');

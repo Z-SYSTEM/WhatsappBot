@@ -46,6 +46,16 @@ function setupHealthRoutes(bot, config, authenticateToken) {
     });
   });
 
+  // Endpoint para ver información detallada de health
+  router.get('/health-info', authenticateToken, (req, res) => {
+    const status = bot.getStatus();
+    res.json({
+      bot_status: status,
+      bot_name: config.botName,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   return router;
 }
 
