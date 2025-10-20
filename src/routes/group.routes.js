@@ -66,7 +66,7 @@ function setupGroupRoutes(bot, authenticateToken) {
       }
       
     } catch (error) {
-      logger.error('[GROUP_ROUTE] Error en endpoint de grupo:', error.message);
+      logger.error(`[GROUP_ROUTE] Error en endpoint de grupo: ${error.message}`);
       res.status(500).json({ 
         res: false, 
         error: 'Error interno del servidor',

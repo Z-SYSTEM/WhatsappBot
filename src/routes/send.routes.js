@@ -141,7 +141,7 @@ function setupSendRoutes(bot, authenticateToken) {
       }
 
     } catch (error) {
-      logger.error('[SEND_ROUTE] Error enviando mensaje:', error.message);
+      logger.error(`[SEND_ROUTE] Error enviando mensaje: ${error.message}`);
       res.status(500).json({
         res: false,
         error: 'Error interno del servidor',

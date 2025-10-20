@@ -61,7 +61,7 @@ function setupContactRoutes(bot, authenticateToken) {
       }
       
     } catch (error) {
-      logger.error('[CONTACT_ROUTE] Error en endpoint de contacto:', error.message);
+      logger.error(`[CONTACT_ROUTE] Error en endpoint de contacto: ${error.message}`);
       res.status(500).json({ 
         res: false, 
         error: 'Error interno del servidor',
