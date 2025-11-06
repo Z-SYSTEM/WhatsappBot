@@ -1,20 +1,24 @@
 import makeWASocket, { DisconnectReason, useMultiFileAuthState, Browsers } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { logger, logRecovery } from '../logger.js';
-import { generateQRCode } from '../qr-handler.js';
+// import { generateQRCode } from '../qr-handler.js';
 import { _WHATSAPP_VERSION } from '../constants.js';
 
 class WhatsAppConnection {
-  constructor(config, sessionManager, messageHandler, callHandler) {
+  constructor(config, sessionManager, messageHandler, callHandler, io = null) {
     this.config = config;
     this.sessionManager = sessionManager;
     this.messageHandler = messageHandler;
     this.callHandler = callHandler;
+    this.io = io;
+    this.onConnected = null;
+    this.onDisconnected = null;
     
     // Estado de conexión
     this.sock = null;
     this.isConnected = false;
     this.isReconnecting = false;
+    this.currentQR = null;
     
     // Sistema de reintentos
     this.reconnectAttempts = 0;
@@ -37,38 +41,50 @@ class WhatsAppConnection {
       'SessionEntry',
       'Bot error: Closing open session',
       'Bad MAC',
-      'Failed to decrypt message'
+      'Failed to decrypt message',
+      'No matching sessions found for message',
+      'Invalid PreKey ID',
+      'No session record'
     ];
     
-    const shouldIgnore = (message) => {
-      if (typeof message === 'string') {
-        if (ignoredMessages.some(ignored => message.includes(ignored))) {
-          return true;
-        }
-        if (message.includes('SessionEntry') || message.includes('Closing session')) {
-          return true;
-        }
-        if (message.includes('Bad MAC') || message.includes('Failed to decrypt message')) {
-          return true;
+    const getMessageText = (data) => {
+      let text = '';
+      if (typeof data === 'string') {
+        text = data;
+      } else if (data instanceof Error) {
+        text = data.message;
+      } else if (typeof data === 'object' && data !== null) {
+        // Handle pino-like log objects from Baileys
+        if (data.err instanceof Error) {
+          text = data.err.message;
+        } else if (data.msg) {
+          text = data.msg;
         }
       }
-      return false;
+      return text;
+    };
+
+    const shouldIgnore = (data) => {
+      const messageText = getMessageText(data);
+      if (!messageText) return false;
+      
+      return ignoredMessages.some(ignored => messageText.includes(ignored));
     };
     
     return {
       trace: () => {},
       debug: () => {},
-      info: () => {},
-      warn: (message) => {
-        if (!shouldIgnore(message)) {
-          console.log(`[WARN] ${message}`);
+      info: () => {}, // Silencing info logs from Baileys for a cleaner console
+      warn: (data) => {
+        if (!shouldIgnore(data)) {
+          const message = getMessageText(data) || 'Unknown Baileys Warning';
+          logger.warn(`[BAILEYS] ${message}`, { baileysLog: data });
         }
       },
-      error: (message) => {
-        if (!shouldIgnore(message)) {
-          if (typeof message === 'string' && !message.includes('Bot error:')) {
-            console.log(`[ERROR] ${message}`);
-          }
+      error: (data) => {
+        if (!shouldIgnore(data)) {
+          const message = getMessageText(data) || 'Unknown Baileys Error';
+          logger.error(`[BAILEYS] ${message}`, { baileysLog: data });
         }
       },
       child: function() { return this; }
@@ -142,15 +158,32 @@ class WhatsAppConnection {
   async handleConnectionUpdate(update) {
     const { connection, lastDisconnect, qr } = update;
     
+    if (this.io) {
+      if (qr) {
+        this.currentQR = qr;
+        this.io.emit('qr_update', qr);
+      }
+      if (connection === 'open') {
+        this.currentQR = null;
+        this.io.emit('status_update', { isReady: true, isConnecting: false, message: 'Bot conectado exitosamente' });
+        this.io.emit('qr_update', null);
+      } else if (connection === 'close') {
+        this.io.emit('status_update', { isReady: false, isConnecting: false, message: 'Bot desconectado' });
+      } else if (connection === 'connecting') {
+        this.io.emit('status_update', { isReady: false, isConnecting: true, message: 'Conectando...' });
+      }
+    }
+    
     if (qr) {
-      logger.info('[WA_CONNECTION] QR Code generado, escanea con WhatsApp');
-      await generateQRCode(qr);
+      logger.info('[WA_CONNECTION] QR Code generado. Ver la interfaz web para escanear.');
     }
     
     if (connection === 'close') {
       await this.handleConnectionClose(lastDisconnect);
     } else if (connection === 'open') {
       await this.handleConnectionOpen();
+    } else if (connection === 'connecting') {
+      logger.info('[WA_CONNECTION] Conectando...');
     }
   }
 
@@ -181,12 +214,29 @@ class WhatsAppConnection {
     }
     
     this.isConnected = false;
+    if (this.onDisconnected) {
+      this.onDisconnected();
+    }
     
     if (shouldReconnect) {
       await this.handleRetry('connection_closed', lastDisconnect?.error);
     } else {
-      logger.error('[WA_CONNECTION] Conexión cerrada por logout del usuario - No se reconectará');
-      process.exit(1);
+      logger.error('[WA_CONNECTION] Conexión cerrada por logout del usuario. Limpiando sesión para generar nuevo QR.');
+      
+      // Limpiar la sesión (sin restaurar) para forzar un nuevo QR
+      await this.sessionManager.cleanupCorrupted({ restoreAfter: false });
+      
+      // Resetear el estado de reintentos
+      this.resetRetryState();
+      
+      // Intentar reconectar para obtener un nuevo QR
+      // Un pequeño delay para asegurar que todo se ha limpiado
+      setTimeout(() => {
+        logger.info('[WA_CONNECTION] Intentando reconectar para obtener nuevo QR...');
+        this.connect().catch(err => {
+          logger.error('[WA_CONNECTION] Error al intentar reconectar tras logout:', err.message);
+        });
+      }, 1000);
     }
   }
 
@@ -197,6 +247,10 @@ class WhatsAppConnection {
     this.isConnected = true;
     this.resetRetryState();
     logger.info('[WA_CONNECTION] Bot conectado exitosamente');
+    
+    if (this.onConnected) {
+      this.onConnected(this.sock);
+    }
     
     // Hacer backup de la sesión establecida
     setTimeout(() => {
@@ -209,6 +263,14 @@ class WhatsAppConnection {
    */
   async handleMessagesUpsert(m) {
     const msg = m.messages[0];
+    
+    // Log crudo para depuración
+    if (msg) {
+        logger.debug(`[WA_CONNECTION] Raw message content: ${JSON.stringify(msg, null, 2)}`);
+    } else {
+        logger.debug(`[WA_CONNECTION] Received empty messages.upsert event: ${JSON.stringify(m, null, 2)}`);
+        return;
+    }
     
     logger.debug(`[WA_CONNECTION] Mensaje recibido de ${msg.key.remoteJid}, fromMe: ${msg.key.fromMe}, tipo: ${Object.keys(msg.message || {}).join(', ')}`);
     

@@ -16,6 +16,35 @@ class MessageSender {
   }
 
   /**
+   * Wrapper for sock.sendMessage with timeout and retry for 'No session record'
+   */
+  async _sendMessageWithRetry(jid, content, timeout = 8000) {
+    const doSend = () => this.sock.sendMessage(jid, content);
+    
+    try {
+      return await Promise.race([
+        doSend(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(`SendMessage timeout after ${timeout / 1000} seconds`)), timeout)
+        )
+      ]);
+    } catch (error) {
+      if (error.message && (error.message.includes('No session record') || error.message.includes('Invalid PreKey ID'))) {
+        logger.warn(`[MESSAGE_SENDER] Session error for ${jid}: "${error.message}". Retrying once after 1s...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        return await Promise.race([
+          doSend(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`SendMessage timeout after ${timeout / 1000} seconds on retry`)), timeout)
+          )
+        ]);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Actualiza el socket de WhatsApp
    */
   updateSocket(sock) {
@@ -56,18 +85,7 @@ class MessageSender {
    * Envía un mensaje de texto
    */
   async sendTextMessage(jid, message) {
-    try {
-      // Agregar timeout para evitar cuelgues indefinidos
-      return await Promise.race([
-        this.sock.sendMessage(jid, { text: message }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('SendMessage timeout after 8 seconds')), 8000)
-        )
-      ]);
-    } catch (sendError) {
-      logger.error(`[MESSAGE_SENDER] Error enviando texto a ${jid}: ${sendError.message}`);
-      throw sendError;
-    }
+    return await this._sendMessageWithRetry(jid, { text: message });
   }
 
   /**
@@ -84,7 +102,7 @@ class MessageSender {
       throw new Error('URL o datos de imagen requeridos');
     }
     
-    const sentMessage = await this.sock.sendMessage(jid, {
+    const sentMessage = await this._sendMessageWithRetry(jid, {
       image: buffer,
       caption: message,
       mimetype: media.mimetype || 'image/jpeg'
@@ -139,7 +157,7 @@ class MessageSender {
       throw new Error('URL o datos de video requeridos');
     }
     
-    return await this.sock.sendMessage(jid, {
+    return await this._sendMessageWithRetry(jid, {
       video: buffer,
       caption: message,
       mimetype: media.mimetype || 'video/mp4'
@@ -160,7 +178,7 @@ class MessageSender {
       throw new Error('URL o datos de audio requeridos');
     }
     
-    return await this.sock.sendMessage(jid, {
+    return await this._sendMessageWithRetry(jid, {
       audio: buffer,
       mimetype: media.mimetype || 'audio/ogg',
       ptt: false
@@ -181,7 +199,7 @@ class MessageSender {
       throw new Error('URL o datos de documento requeridos');
     }
     
-    return await this.sock.sendMessage(jid, {
+    return await this._sendMessageWithRetry(jid, {
       document: buffer,
       mimetype: media.mimetype || 'application/octet-stream',
       fileName: media.filename || 'document'
@@ -196,7 +214,7 @@ class MessageSender {
       throw new Error('Coordenadas de ubicación requeridas');
     }
     
-    return await this.sock.sendMessage(jid, {
+    return await this._sendMessageWithRetry(jid, {
       location: {
         degreesLatitude: media.latitude,
         degreesLongitude: media.longitude,
@@ -211,7 +229,7 @@ class MessageSender {
   async sendContactMessage(jid, media) {
     if (media && media.contact) {
       // Enviar contacto usando objeto contact
-      return await this.sock.sendMessage(jid, {
+      return await this._sendMessageWithRetry(jid, {
         contacts: {
           displayName: media.contact.name,
           contacts: [{
@@ -222,7 +240,7 @@ class MessageSender {
       });
     } else if (media && media.vcard) {
       // Enviar contacto usando vCard
-      return await this.sock.sendMessage(jid, {
+      return await this._sendMessageWithRetry(jid, {
         contacts: {
           displayName: 'Contact',
           contacts: [{

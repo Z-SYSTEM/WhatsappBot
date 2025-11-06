@@ -30,14 +30,16 @@ async function logOnMessageRequest(requestData) {
 }
 
 class WhatsAppBot {
-  constructor(config) {
+  constructor(config, io = null) {
     this.config = config;
+    this.io = io;
     
     // Estado del bot
     this.botStatus = {
       isReady: false,
       isConnecting: false,
       lastHealthCheck: null,
+      lastMessageTimestamp: null,
       restartAttempts: 0,
       maxRestartAttempts: 3
     };
@@ -72,7 +74,8 @@ class WhatsAppBot {
         this.albumHandler,
         this.httpClient,
         this.config.onMessage,
-        logOnMessageRequest
+        logOnMessageRequest,
+        () => { this.botStatus.lastMessageTimestamp = new Date(); } // Callback
       );
       
       // MessageSender y CallHandler se inicializarán después de conectar
@@ -83,8 +86,17 @@ class WhatsAppBot {
         this.config,
         this.sessionManager,
         this.messageHandler,
-        null // callHandler se asignará después
+        null, // callHandler se asignará después
+        this.io
       );
+      
+      // Callbacks para manejar el ciclo de vida de la conexión
+      this.connection.onConnected = (sock) => this.updateHandlers(sock);
+      this.connection.onDisconnected = () => {
+        logger.warn('[WHATSAPP_BOT] Conexión perdida.');
+        this.botStatus.isReady = false;
+        this.botStatus.isConnecting = true; // Asumimos que intentará reconectar
+      };
       
       // Crear CallHandler con el socket (que se actualizará después de conectar)
       this.callHandler = new CallHandler(
@@ -107,31 +119,38 @@ class WhatsAppBot {
   }
 
   /**
+   * Actualiza los handlers que dependen del socket
+   */
+  updateHandlers(sock) {
+    logger.info('[WHATSAPP_BOT] Conexión establecida. Actualizando handlers...');
+    
+    // Crear MessageSender con el nuevo socket
+    this.messageSender = new MessageSender(
+      sock,
+      this.httpClient,
+      this.config.onMessage
+    );
+    
+    // Actualizar CallHandler con el socket
+    this.callHandler.updateSocket(sock);
+
+    this.botStatus.isReady = true;
+    this.botStatus.isConnecting = false;
+  }
+
+  /**
    * Conecta el bot a WhatsApp
    */
   async connect() {
     try {
       this.botStatus.isConnecting = true;
+      this.botStatus.isReady = false;
       
       await this.connection.connect();
       
-      // Obtener socket y actualizar handlers
-      const sock = this.connection.getSocket();
+      // La actualización de handlers y estado se hará en los callbacks
       
-      // Crear MessageSender con el socket
-      this.messageSender = new MessageSender(
-        sock,
-        this.httpClient,
-        this.config.onMessage
-      );
-      
-      // Actualizar CallHandler con el socket
-      this.callHandler.updateSocket(sock);
-      
-      this.botStatus.isReady = true;
-      this.botStatus.isConnecting = false;
-      
-      logger.info('[WHATSAPP_BOT] Bot conectado y listo');
+      logger.info('[WHATSAPP_BOT] Proceso de conexión iniciado. Esperando estado "open"...');
       
     } catch (error) {
       this.botStatus.isConnecting = false;
@@ -147,9 +166,88 @@ class WhatsAppBot {
     try {
       await this.connection.disconnect();
       this.botStatus.isReady = false;
+      this.botStatus.isConnecting = false;
       logger.info('[WHATSAPP_BOT] Bot desconectado');
     } catch (error) {
       logger.error('[WHATSAPP_BOT] Error desconectando bot:', error.message);
+    }
+  }
+
+  /**
+   * Reconecta el bot
+   */
+  async reconnect() {
+    logger.warn('[WHATSAPP_BOT] Iniciando proceso de reconexión forzada...');
+    try {
+      await this.disconnect();
+      // Pequeña pausa para asegurar que todo se cierre correctamente
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await this.connect();
+      logger.info('[WHATSAPP_BOT] Proceso de reconexión forzada completado.');
+    } catch (error) {
+      logger.error('[WHATSAPP_BOT] Error durante la reconexión forzada:', error.message);
+    }
+  }
+
+  /**
+   * Realiza un chequeo de salud
+   */
+  async healthCheck() {
+    this.botStatus.lastHealthCheck = new Date();
+
+    if (!this.connection || !this.connection.getSocket()) {
+      logger.debug('[HEALTH_CHECK] El bot no está inicializado, saltando chequeo.');
+      return;
+    }
+
+    const sock = this.connection.getSocket();
+    const isWsOpen = sock.ws?.isOpen ?? false;
+    const isBotReady = this.isReady();
+
+    logger.debug(`[HEALTH_CHECK] Estado: isReady=${isBotReady}, isWsOpen=${isWsOpen}, isConnecting=${this.botStatus.isConnecting}`);
+
+    // Caso 1: El bot se cree conectado, pero el websocket está cerrado. Es un estado "trabado".
+    if (isBotReady && !isWsOpen) {
+      logger.error('[HEALTH_CHECK] ¡FALLO! El bot se reporta como listo pero el WebSocket está cerrado. Forzando reconexión...');
+      await this.reconnect();
+      return;
+    }
+
+    // Caso 2: El bot no está listo y no se está reconectando. Puede que la reconexión automática fallara.
+    if (!isBotReady && !this.botStatus.isConnecting && !this.connection.isReconnecting) {
+        logger.warn('[HEALTH_CHECK] El bot no está conectado y no parece estar reconectando. Iniciando conexión...');
+        await this.connect().catch(e => logger.error('[HEALTH_CHECK] Error al intentar conectar desde health check:', e.message));
+        return;
+    }
+    
+    // Caso 3: Chequeo activo. El bot parece listo, pero puede no estar recibiendo mensajes.
+    if (isBotReady) { // isWsOpen is implied by Case 1 not triggering
+      try {
+        // Usamos un timeout para no quedarnos esperando indefinidamente
+        await Promise.race([
+          sock.sendPresenceUpdate('available'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en chequeo de presencia')), 15000)) // 15 segundos de timeout
+        ]);
+        
+        // Si el chequeo de presencia es exitoso, verificamos el tiempo de silencio
+        if (this.config.healthCheckMaxSilenceMinutes > 0 && this.botStatus.lastMessageTimestamp) {
+          const silenceDurationMinutes = (new Date() - this.botStatus.lastMessageTimestamp) / (1000 * 60);
+          if (silenceDurationMinutes > this.config.healthCheckMaxSilenceMinutes) {
+            logger.warn(`[HEALTH_CHECK] ¡ALERTA! No se han recibido mensajes en ${silenceDurationMinutes.toFixed(1)} minutos. Forzando reconexión por posible estado zombie.`);
+            await this.reconnect();
+            silenceDurationMinutes = 0;
+            return; // Salimos después de reconectar
+          }
+        }
+
+        logger.info('[HEALTH_CHECK] El bot está saludable (chequeo de presencia y silencio OK).');
+
+      } catch (e) {
+        logger.error(`[HEALTH_CHECK] ¡FALLO! Chequeo de presencia falló: ${e.message}. Forzando reconexión...`);
+        await this.reconnect();
+      }
+    } else {
+      logger.info('[HEALTH_CHECK] El bot no está listo, pero está en proceso de conexión.');
     }
   }
 
@@ -180,6 +278,13 @@ class WhatsAppBot {
       isReady: this.isReady(),
       isConnecting: this.botStatus.isConnecting
     };
+  }
+
+  /**
+   * Obtiene el QR actual si existe
+   */
+  getQRCode() {
+    return this.connection ? this.connection.currentQR : null;
   }
 
   /**

@@ -114,8 +114,10 @@ class SessionManager {
 
   /**
    * Limpia sesión corrupta y hace backup antes de eliminarla
+   * @param {object} options - Opciones.
+   * @param {boolean} options.restoreAfter - Si es true, intenta restaurar desde backup.
    */
-  async cleanupCorrupted() {
+  async cleanupCorrupted({ restoreAfter = true } = {}) {
     try {
       // Hacer backup de la sesión corrupta antes de eliminarla
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -132,14 +134,16 @@ class SessionManager {
       
       logger.info('[SESSION_MANAGER] Sesión corrupta eliminada');
       
-      // Intentar restaurar desde backup más reciente
-      logger.info('[SESSION_MANAGER] Intentando restore automático desde backup...');
-      const restored = await this.restore();
-      
-      if (restored) {
-        logger.info('[SESSION_MANAGER] ✅ Sesión restaurada automáticamente desde backup');
-      } else {
-        logger.warn('[SESSION_MANAGER] ⚠️ No se encontró backup válido, se requerirá nuevo QR');
+      if (restoreAfter) {
+        // Intentar restaurar desde backup más reciente
+        logger.info('[SESSION_MANAGER] Intentando restore automático desde backup...');
+        const restored = await this.restore();
+        
+        if (restored) {
+          logger.info('[SESSION_MANAGER] ✅ Sesión restaurada automáticamente desde backup');
+        } else {
+          logger.warn('[SESSION_MANAGER] ⚠️ No se encontró backup válido, se requerirá nuevo QR');
+        }
       }
       
     } catch (error) {

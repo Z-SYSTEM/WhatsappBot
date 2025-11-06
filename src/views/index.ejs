@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estado del Bot - <%= botName %></title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Estado del Bot: <%= botName %></h1>
+        <div id="status-container">
+            <div id="status-indicator" class="disconnected"></div>
+            <p id="status-text">Desconectado</p>
+        </div>
+        <div id="qr-container">
+            <p>Escanea el código QR para conectar</p>
+            <canvas id="qr-canvas"></canvas>
+        </div>
+
+        <div class="test-message-container">
+            <h2>Enviar Mensaje de Prueba</h2>
+            <form id="test-message-form">
+                <div class="form-group">
+                    <label for="test-phone">Número de Teléfono (ej: 5491122334455)</label>
+                    <input type="text" id="test-phone" name="phone" required placeholder="549...">
+                </div>
+                <div class="form-group">
+                    <label for="test-message">Mensaje</label>
+                    <textarea id="test-message" name="message" rows="3" required>Este es un mensaje de prueba.</textarea>
+                </div>
+                <button type="submit" class="btn-send-test">Enviar Prueba</button>
+            </form>
+            <div id="test-message-status"></div>
+        </div>
+
+        <div class="log-container">
+            <h2>Log en Tiempo Real</h2>
+            <div id="log-box"></div>
+        </div>
+
+        <a href="/logout" class="btn-logout">Cerrar Sesión</a>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="/js/main.js"></script>
+</body>
+</html>

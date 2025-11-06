@@ -1,13 +1,14 @@
 import express from 'express';
 import fs from 'fs-extra';
 import cron from 'node-cron';
-import net from 'net';
+// import net from 'net'; // No longer needed
 import { logger } from './logger.js';
 import { cleanupOldLogs } from './logger.js';
 import config from './config.js';
 import WhatsAppBot from './core/WhatsAppBot.js';
 import { authenticateToken } from './middleware/auth.js';
 import setupRoutes from './routes/index.js';
+import { createWebServer } from './web/web-server.js';
 
 // Crear directorios necesarios
 const dirs = [config.dirs.logs, config.dirs.sessions, config.dirs.backups];
@@ -18,48 +19,17 @@ dirs.forEach(dir => {
 // Variable global para el bot
 let bot = null;
 
-// Función para verificar si ya existe otra instancia corriendo
-async function checkExistingInstance() {
-  try {
-    return new Promise((resolve) => {
-      const tempServer = net.createServer();
-      
-      tempServer.once('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          logger.warn(`Puerto ${config.port} ya está en uso por otra instancia`);
-          logger.warn('Cerrando esta instancia para evitar conflictos');
-          process.exit(0);
-        } else {
-          logger.error('Error verificando puerto:', err.message);
-          resolve();
-        }
-      });
-      
-      tempServer.once('listening', () => {
-        tempServer.close(() => {
-          logger.info('Puerto disponible, continuando con el inicio');
-          resolve();
-        });
-      });
-      
-      tempServer.listen(config.port);
-    });
-  } catch (error) {
-    logger.error('Error en verificación de instancia única:', error.message);
-  }
-}
-
 // Configurar Express
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Inicializar bot
-async function initializeBot() {
+async function initializeBot(io) {
   try {
     logger.info('[INIT] Inicializando WhatsApp Bot...');
     
-    bot = new WhatsAppBot(config);
+    bot = new WhatsAppBot(config, io);
     await bot.initialize();
     
     logger.info('[INIT] Bot inicializado, conectando a WhatsApp...');
@@ -86,14 +56,114 @@ cron.schedule('0 2 * * *', async () => {
   await cleanupOldLogs();
 });
 
+// Configurar cron job para health check
+if (config.healthCheckInterval > 0) {
+  cron.schedule(`*/${config.healthCheckInterval} * * * * *`, () => {
+    logger.debug('[CRON] Ejecutando health check...');
+    if (bot) {
+      bot.healthCheck();
+    }
+  });
+}
+
 // Iniciar servidor
 async function startServer() {
   // Verificar instancia única
-  await checkExistingInstance();
+  // await checkExistingInstance(); // REMOVED
+  
+  // Iniciar servidor web UI
+  let io = null;
+  if (config.portWeb) {
+    const webServer = createWebServer(config);
+    io = webServer.io;
+
+    // Monkey-patch logger to emit logs to UI
+    const originalLog = logger.log;
+    logger.log = function(...args) {
+      const result = originalLog.apply(this, args); // Log first
+      if (io) {
+        try {
+          const info = args[0];
+          let logData = null;
+          if (typeof info === 'object' && info !== null) {
+            logData = { level: info.level, message: info.message };
+          } else if (typeof info === 'string') {
+            logData = { level: info, message: args[1] };
+          }
+          
+          if (logData && logData.message) {
+            let messageContent = logData.message;
+            if (typeof messageContent !== 'string') {
+              // Handle non-string messages, like objects
+              messageContent = JSON.stringify(messageContent, null, 2);
+            }
+
+            io.emit('log_entry', {
+                timestamp: new Date().toISOString(),
+                level: logData.level || 'info',
+                message: messageContent,
+            });
+          }
+        } catch (e) {
+          // Failsafe to prevent crashing the logger
+          console.error('Error in logger monkey-patch:', e);
+        }
+      }
+      return result;
+    };
+
+    io.on('connection', (socket) => {
+      // Proteger conexión de socket
+      if (!socket.request.session.isAuthenticated) {
+        socket.disconnect(true);
+        return;
+      }
+
+      if (bot) {
+        const status = bot.getStatus();
+        socket.emit('status_update', { 
+            isReady: status.isReady, 
+            isConnecting: status.isConnecting,
+            message: status.isReady ? 'Bot conectado' : (status.isConnecting ? 'Conectando...' : 'Bot desconectado')
+        });
+
+        // Enviar QR actual si existe
+        const currentQR = bot.getQRCode();
+        if (currentQR) {
+          socket.emit('qr_update', currentQR);
+        }
+      } else {
+        socket.emit('status_update', { isReady: false, isConnecting: true, message: 'Inicializando bot...' });
+      }
+
+      socket.on('send_test_message', async (data) => {
+        if (!data.phone || !data.message) {
+            return socket.emit('test_message_result', { success: false, error: 'Número y mensaje son requeridos.', phone: data.phone });
+        }
+        if (bot && bot.isReady()) {
+            try {
+                logger.info(`[WEB_UI] Enviando mensaje de prueba a ${data.phone}`);
+                const result = await bot.sendMessage({
+                    phone: data.phone,
+                    message: data.message,
+                    type: 'text'
+                });
+                socket.emit('test_message_result', { ...result, phone: data.phone });
+            } catch (error) {
+                logger.error(`[WEB_UI] Error enviando mensaje de prueba: ${error.message}`);
+                socket.emit('test_message_result', { success: false, error: error.message, phone: data.phone });
+            }
+        } else {
+            logger.warn(`[WEB_UI] Intento de enviar mensaje de prueba pero el bot no está listo.`);
+            socket.emit('test_message_result', { success: false, error: 'Bot no está listo.', phone: data.phone });
+        }
+      });
+    });
+  }
   
   // Inicializar y conectar bot ANTES de configurar las rutas
   try {
-    await initializeBot();
+    await initializeBot(io);
   } catch (error) {
     logger.error('[STARTUP] Error inicial conectando a WhatsApp:', error.message);
   }
@@ -103,7 +173,7 @@ async function startServer() {
   setupRoutes(app, bot, config, authMiddleware);
   
   const server = app.listen(config.port, async () => {
-    logger.info(`Servidor iniciado en puerto ${config.port}`);
+    logger.info(`Servidor API iniciado en puerto ${config.port}`);
     logger.info(`Bot name: ${config.botName}`);
     logger.info('[STARTUP] Servidor y bot listos');
   });
@@ -111,11 +181,11 @@ async function startServer() {
   // Manejar errores del servidor
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      logger.error(`[SERVER] Puerto ${config.port} ya está en uso por otra instancia`);
+      logger.error(`[SERVER] El puerto API ${config.port} ya está en uso por otra instancia`);
       logger.error('[SERVER] Cerrando esta instancia para evitar conflictos');
       process.exit(1);
     } else {
-      logger.error('[SERVER] Error al iniciar servidor:', err.message);
+      logger.error('[SERVER] Error al iniciar servidor API:', err.message);
       process.exit(1);
     }
   });
@@ -142,6 +212,12 @@ process.on('SIGTERM', async () => {
 
 // Manejo de errores no capturados
 process.on('uncaughtException', async (err) => {
+  // Ignorar errores de sesión de Baileys que son comunes y no críticos
+  if (err && err.message && (err.message.includes('Bad MAC') || err.message.includes('Failed to decrypt message'))) {
+    logger.debug(`[RECOVERY] Ignorando error de sesión no crítico (uncaught): ${err.message}`);
+    return;
+  }
+
   logger.error('Uncaught Exception:', {
     message: err && err.message,
     stack: err && err.stack,
@@ -234,6 +310,12 @@ process.on('uncaughtException', async (err) => {
 });
 
 process.on('unhandledRejection', async (reason, promise) => {
+  // Ignorar errores de sesión de Baileys que son comunes y no críticos
+  if (reason && reason.message && (reason.message.includes('Bad MAC') || reason.message.includes('Failed to decrypt message'))) {
+    logger.debug(`[RECOVERY] Ignorando error de sesión no crítico (unhandled): ${reason.message}`);
+    return;
+  }
+
   logger.error('Unhandled Rejection:', reason);
   logger.error(`[RECOVERY] Stack trace: ${reason && reason.stack}`);
   

@@ -14,11 +14,12 @@ import {
 } from '../constants.js';
 
 class MessageHandler {
-  constructor(albumHandler, httpClient, onMessageUrl, logOnMessageRequest) {
+  constructor(albumHandler, httpClient, onMessageUrl, logOnMessageRequest, onMessageReceived) {
     this.albumHandler = albumHandler;
     this.httpClient = httpClient;
     this.onMessageUrl = onMessageUrl;
     this.logOnMessageRequest = logOnMessageRequest;
+    this.onMessageReceived = onMessageReceived; // Callback to update timestamp
   }
 
   /**
@@ -33,6 +34,11 @@ class MessageHandler {
    */
   async handleIncomingMessage(msg) {
     try {
+      // Notificar que se ha recibido un mensaje
+      if (this.onMessageReceived) {
+        this.onMessageReceived();
+      }
+
       // Verificar si el mensaje ya fue procesado
       if (this.albumHandler.isProcessed(msg.key.id)) {
         logger.debug(`[MESSAGE_HANDLER] Mensaje ya procesado, ignorando: ${msg.key.id}`);

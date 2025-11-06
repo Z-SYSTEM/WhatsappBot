@@ -1,56 +1,46 @@
 import dotenv from 'dotenv';
-import { logger } from './logger.js';
-import {
-  _DEFAULT_MAX_RECONNECT_ATTEMPTS,
-  _DEFAULT_INITIAL_RECONNECT_DELAY,
-  _DEFAULT_MAX_RECONNECT_DELAY,
-  _DEFAULT_RECONNECT_BACKOFF_MULTIPLIER,
-  _DEFAULT_MAX_CONSECUTIVE_FAILURES
-} from './constants.js';
+import path from 'path';
 
 dotenv.config();
 
-// Validación de variables de entorno requeridas
-const requiredEnvVars = ['BOT_NAME', 'TOKENACCESS', 'PORT'];
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingVars.length > 0) {
-  logger.error(`Variables de entorno faltantes: ${missingVars.join(', ')}`);
-  process.exit(1);
-}
-
-// Configuración centralizada
 const config = {
-  // Configuración básica
-  botName: process.env.BOT_NAME,
-  tokenAccess: process.env.TOKENACCESS,
+  // Bot and Server configuration
+  botName: process.env.BOT_NAME || 'WhatsAppBot',
   port: process.env.PORT || 4002,
-  
+  portWeb: process.env.PORT_WEB || 4003,
+  tokenAccess: process.env.TOKENACCESS,
+
+  // Web UI Credentials
+  sessionSecret: process.env.SESSION_SECRET || 'default_secret_key',
+  webUser: process.env.WEB_USER || 'admin',
+  webPassword: process.env.WEB_PASSWORD || 'admin',
+
   // Webhooks
   onMessage: process.env.ONMESSAGE,
-  
-  // Notificaciones FCM
+
+  // FCM Notifications
   fcmDeviceToken: process.env.FCM_DEVICE_TOKEN,
-  
-  // Health Check
-  healthCheckIntervalSeconds: parseInt(process.env.HEALTH_CHECK_INTERVAL_SECONDS) || 30,
-  
-  // Llamadas
+
+  // Call handling
   acceptCall: process.env.ACCEPT_CALL === 'TRUE',
-  
-  // Reconexión
-  maxReconnectAttempts: parseInt(process.env.MAX_RECONNECT_ATTEMPTS) || _DEFAULT_MAX_RECONNECT_ATTEMPTS,
-  initialReconnectDelay: parseInt(process.env.INITIAL_RECONNECT_DELAY) || _DEFAULT_INITIAL_RECONNECT_DELAY,
-  maxReconnectDelay: parseInt(process.env.MAX_RECONNECT_DELAY) || _DEFAULT_MAX_RECONNECT_DELAY,
-  reconnectBackoffMultiplier: parseFloat(process.env.RECONNECT_BACKOFF_MULTIPLIER) || _DEFAULT_RECONNECT_BACKOFF_MULTIPLIER,
-  maxConsecutiveFailures: parseInt(process.env.MAX_CONSECUTIVE_FAILURES) || _DEFAULT_MAX_CONSECUTIVE_FAILURES,
-  
-  // Directorios
+
+  // Health Check
+  healthCheckInterval: parseInt(process.env.HEALTH_CHECK_INTERVAL_SECONDS, 10) || 30,
+  healthCheckMaxSilenceMinutes: parseInt(process.env.HEALTH_CHECK_MAX_SILENCE_MINUTES, 10) || 10,
+
+  // Directories
   dirs: {
-    logs: 'logs',
-    sessions: 'sessions',
-    backups: 'backups'
-  }
+    sessions: path.resolve('sessions'),
+    backups: path.resolve('backups'),
+    logs: path.resolve('logs'),
+  },
+
+  // Reconnection strategy (sensible defaults)
+  initialReconnectDelay: 5000, // 5 seconds
+  reconnectBackoffMultiplier: 1.5,
+  maxReconnectDelay: 60000, // 1 minute
+  maxReconnectAttempts: 10,
+  maxConsecutiveFailures: 5,
 };
 
 export default config;
