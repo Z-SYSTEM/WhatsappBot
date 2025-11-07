@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import cron from 'node-cron';
 // import net from 'net'; // No longer needed
 import { logger } from './logger.js';
+import Transport from 'winston-transport';
 import { cleanupOldLogs } from './logger.js';
 import config from './config.js';
 import WhatsAppBot from './core/WhatsAppBot.js';
@@ -77,40 +78,53 @@ async function startServer() {
     const webServer = createWebServer(config);
     io = webServer.io;
 
-    // Monkey-patch logger to emit logs to UI
-    const originalLog = logger.log;
-    logger.log = function(...args) {
-      const result = originalLog.apply(this, args); // Log first
-      if (io) {
-        try {
-          const info = args[0];
-          let logData = null;
-          if (typeof info === 'object' && info !== null) {
-            logData = { level: info.level, message: info.message };
-          } else if (typeof info === 'string') {
-            logData = { level: info, message: args[1] };
-          }
-          
-          if (logData && logData.message) {
-            let messageContent = logData.message;
-            if (typeof messageContent !== 'string') {
-              // Handle non-string messages, like objects
-              messageContent = JSON.stringify(messageContent, null, 2);
+    // Custom Winston transport to emit logs to the UI via Socket.IO
+    class SocketIoTransport extends Transport {
+        constructor(opts) {
+            super(opts);
+            this.io = opts.io;
+        }
+
+        log(info, callback) {
+            setImmediate(() => { this.emit('logged', info); });
+
+            if (this.io) {
+                try {
+                    if (!info || typeof info !== 'object') {
+                        return callback();
+                    }
+
+                    const { level, message, timestamp } = info;
+                    let messageContent = '';
+
+                    if (message) {
+                        // Solo mostrar el mensaje si es un string para evitar JSON
+                        if (typeof message === 'string') {
+                            messageContent = message;
+                        } else {
+                            // Si el mensaje es un objeto, mostramos un texto genérico
+                            messageContent = 'Log de objeto (ver consola/archivos para detalles)';
+                        }
+                    }
+
+                    if (messageContent) {
+                        this.io.emit('log_entry', {
+                            timestamp: timestamp || new Date().toISOString(),
+                            level: level || 'info',
+                            message: messageContent,
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error en SocketIoTransport:', e.message);
+                }
             }
 
-            io.emit('log_entry', {
-                timestamp: new Date().toISOString(),
-                level: logData.level || 'info',
-                message: messageContent,
-            });
-          }
-        } catch (e) {
-          // Failsafe to prevent crashing the logger
-          console.error('Error in logger monkey-patch:', e);
+            callback();
         }
-      }
-      return result;
-    };
+    }
+
+    // Add the custom transport to the logger
+    logger.add(new SocketIoTransport({ io, level: 'info' }));
 
     io.on('connection', (socket) => {
       // Proteger conexión de socket
@@ -156,6 +170,21 @@ async function startServer() {
         } else {
             logger.warn(`[WEB_UI] Intento de enviar mensaje de prueba pero el bot no está listo.`);
             socket.emit('test_message_result', { success: false, error: 'Bot no está listo.', phone: data.phone });
+        }
+      });
+
+      socket.on('logout_whatsapp', async () => {
+        logger.info('[WEB_UI] Solicitud de cierre de sesión de WhatsApp recibida.');
+        if (bot) {
+            await bot.logout();
+        }
+      });
+
+      // New Socket.IO event listener for manual QR refresh
+      socket.on('request_qr_refresh', async () => {
+        logger.info('[WEB_UI] Solicitud de actualización de QR recibida.');
+        if (bot) {
+            await bot.logout(); // Reuse logout logic to force new QR
         }
       });
     });
@@ -213,7 +242,7 @@ process.on('SIGTERM', async () => {
 // Manejo de errores no capturados
 process.on('uncaughtException', async (err) => {
   // Ignorar errores de sesión de Baileys que son comunes y no críticos
-  if (err && err.message && (err.message.includes('Bad MAC') || err.message.includes('Failed to decrypt message'))) {
+  if (err && err.message && (err.message.includes('Bad MAC') || err.message.includes('Failed to decrypt message') || err.message.includes('No session found to decrypt message'))) {
     logger.debug(`[RECOVERY] Ignorando error de sesión no crítico (uncaught): ${err.message}`);
     return;
   }
@@ -311,7 +340,7 @@ process.on('uncaughtException', async (err) => {
 
 process.on('unhandledRejection', async (reason, promise) => {
   // Ignorar errores de sesión de Baileys que son comunes y no críticos
-  if (reason && reason.message && (reason.message.includes('Bad MAC') || reason.message.includes('Failed to decrypt message'))) {
+  if (reason && reason.message && (reason.message.includes('Bad MAC') || reason.message.includes('Failed to decrypt message') || reason.message.includes('No session found to decrypt message'))) {
     logger.debug(`[RECOVERY] Ignorando error de sesión no crítico (unhandled): ${reason.message}`);
     return;
   }

@@ -13,6 +13,7 @@ class WhatsAppConnection {
     this.io = io;
     this.onConnected = null;
     this.onDisconnected = null;
+    this.isManualLogout = false; // Flag for manual logout
     
     // Estado de conexión
     this.sock = null;
@@ -44,7 +45,8 @@ class WhatsAppConnection {
       'Failed to decrypt message',
       'No matching sessions found for message',
       'Invalid PreKey ID',
-      'No session record'
+      'No session record',
+      'No session found to decrypt message'
     ];
     
     const getMessageText = (data) => {
@@ -191,6 +193,12 @@ class WhatsAppConnection {
    * Maneja cierre de conexión
    */
   async handleConnectionClose(lastDisconnect) {
+    if (this.isManualLogout) {
+      logger.info('[WA_CONNECTION] Desconexión intencional por logout. No se reintentará automáticamente.');
+      this.isManualLogout = false; // Reset flag after handling
+      return;
+    }
+
     const disconnectReason = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
     const shouldReconnect = disconnectReason !== DisconnectReason.loggedOut;
     
@@ -245,6 +253,7 @@ class WhatsAppConnection {
    */
   async handleConnectionOpen() {
     this.isConnected = true;
+    this.isManualLogout = false; // Reset flag on successful connection
     this.resetRetryState();
     logger.info('[WA_CONNECTION] Bot conectado exitosamente');
     
@@ -483,7 +492,8 @@ class WhatsAppConnection {
   /**
    * Cierra la conexión
    */
-  async disconnect() {
+  async disconnect({ isLogout = false } = {}) {
+    this.isManualLogout = isLogout;
     if (this.sock) {
       this.sock.end();
       this.isConnected = false;

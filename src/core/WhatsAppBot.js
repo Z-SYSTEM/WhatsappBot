@@ -162,9 +162,9 @@ class WhatsAppBot {
   /**
    * Desconecta el bot
    */
-  async disconnect() {
+  async disconnect({ isLogout = false } = {}) {
     try {
-      await this.connection.disconnect();
+      await this.connection.disconnect({ isLogout });
       this.botStatus.isReady = false;
       this.botStatus.isConnecting = false;
       logger.info('[WHATSAPP_BOT] Bot desconectado');
@@ -186,6 +186,28 @@ class WhatsAppBot {
       logger.info('[WHATSAPP_BOT] Proceso de reconexión forzada completado.');
     } catch (error) {
       logger.error('[WHATSAPP_BOT] Error durante la reconexión forzada:', error.message);
+    }
+  }
+
+  /**
+   * Cierra la sesión de WhatsApp, limpia los datos y reinicia para un nuevo QR.
+   */
+  async logout() {
+    logger.warn('[WHATSAPP_BOT] Iniciando proceso de logout de WhatsApp...');
+    try {
+      // 1. Desconectar el socket actual, marcando como logout manual
+      await this.disconnect({ isLogout: true });
+      
+      // 2. Limpiar la sesión sin restaurar desde backup
+      await this.sessionManager.cleanupSession();
+      
+      // 3. Reiniciar el proceso de conexión para generar un nuevo QR
+      logger.info('[WHATSAPP_BOT] Reiniciando conexión para obtener nuevo QR...');
+      await this.connect();
+      
+      logger.info('[WHATSAPP_BOT] Proceso de logout completado. Esperando nuevo QR.');
+    } catch (error) {
+      logger.error('[WHATSAPP_BOT] Error durante el proceso de logout:', error.message);
     }
   }
 

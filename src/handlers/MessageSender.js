@@ -294,11 +294,10 @@ class MessageSender {
           throw new Error(`Tipo de mensaje no soportado: ${type}`);
       }
 
-      // Log simple
-      logger.info(`[MESSAGE_SENDER] Mensaje enviado a ${phone}: ${message}`);
+      // Log del mensaje enviado con su contenido usando el helper
       logger.debug(`[MESSAGE_SENDER] Message ID: ${sentMessage.key.id}`);
     
-      logMessage.sent({ phoneNumber: phone, type: type });
+      logMessage.sent({ phoneNumber: phone, type: type, body: message }); // Usar el helper logMessage.sent
       return { success: true, messageId: sentMessage.key.id };
 
     } catch (error) {

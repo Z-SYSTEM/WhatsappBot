@@ -32,8 +32,7 @@ const logger = winston.createLogger({
   level: 'info',
   format: winston.format.combine(
     winston.format.timestamp({ format: formatTimestamp }),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
+    winston.format.errors({ stack: true })
   ),
   defaultMeta: { service: 'whatsapp-bot' },
   transports: [
@@ -44,7 +43,12 @@ const logger = winston.createLogger({
       maxSize: '20m', // Máximo 20MB por archivo
       maxFiles: '7d', // Mantener logs de 7 días
       zippedArchive: true, // Comprimir archivos antiguos
-      level: 'info'
+      level: 'info',
+      format: winston.format.combine(
+        winston.format.timestamp({ format: formatTimestamp }),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
+      )
     }),
     
     // Log de errores separado con rotación diaria
@@ -54,7 +58,12 @@ const logger = winston.createLogger({
       maxSize: '10m', // Máximo 10MB por archivo
       maxFiles: '14d', // Mantener errores de 14 días
       zippedArchive: true, // Comprimir archivos antiguos
-      level: 'error'
+      level: 'error',
+      format: winston.format.combine(
+        winston.format.timestamp({ format: formatTimestamp }),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
+      )
     }),
     
     // Console para desarrollo
@@ -81,12 +90,12 @@ const logMessage = {
     tempLogData.timestamp = new Date().toISOString();
     
     // Crear mensaje descriptivo con remitente y contenido
-    let logMessage = `Mensaje recibido de ${messageData.phoneNumber}`;
+    let logMessage = `[MESSAGE_HANDLER] Mensaje recibido de ${messageData.phoneNumber}`; // Añadir prefijo
     
     if (messageData.body && messageData.body.trim()) {
       logMessage += `: "${messageData.body}"`;
     } else if (messageData.type !== 'chat') {
-      logMessage += ` (${messageData.type})`;
+      logMessage += ` (Tipo: ${messageData.type})`; // Clarificar "Tipo"
     }
     
     logger.info(logMessage, tempLogData);
@@ -97,7 +106,15 @@ const logMessage = {
     tempLogData.phoneNumber = messageData.phoneNumber;
     tempLogData.success = true;
     tempLogData.timestamp = new Date().toISOString();
-    logger.info('Mensaje enviado', tempLogData);
+    tempLogData.body = messageData.body; // Añadir el cuerpo del mensaje
+    
+    let logMsg = `[MESSAGE_SENDER] Mensaje enviado a ${messageData.phoneNumber}`; // Añadir prefijo
+    if (messageData.body && messageData.body.trim()) {
+      logMsg += `: "${messageData.body}"`;
+    } else {
+      logMsg += ` (Tipo: ${messageData.type})`;
+    }
+    logger.info(logMsg, tempLogData);
   },
   
   failed: (messageData, error) => {

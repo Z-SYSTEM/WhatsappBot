@@ -113,6 +113,20 @@ class SessionManager {
   }
 
   /**
+   * Limpia la sesión actual (logout)
+   */
+  async cleanupSession() {
+    try {
+      logger.info('[SESSION_MANAGER] Limpiando sesión actual para logout...');
+      await fs.remove(this.sessionPath);
+      await fs.ensureDir(this.sessionPath);
+      logger.info('[SESSION_MANAGER] Directorio de sesión limpiado.');
+    } catch (error) {
+      logger.error('[SESSION_MANAGER] Error limpiando la sesión:', error.message);
+    }
+  }
+
+  /**
    * Limpia sesión corrupta y hace backup antes de eliminarla
    * @param {object} options - Opciones.
    * @param {boolean} options.restoreAfter - Si es true, intenta restaurar desde backup.

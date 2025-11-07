@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const logBox = document.getElementById('log-box');
     const testMessageForm = document.getElementById('test-message-form');
     const testMessageStatus = document.getElementById('test-message-status');
+    const btnLogoutWhatsapp = document.getElementById('btn-logout-whatsapp');
+    const btnRefreshQr = document.getElementById('btn-refresh-qr'); // Get the new button
 
     let qr = null;
 
@@ -61,19 +63,61 @@ document.addEventListener('DOMContentLoaded', () => {
         logEntry.className = `log-entry log-${log.level}`;
         
         const timestamp = new Date(log.timestamp).toLocaleTimeString();
-        
         const levelFormatted = `[${log.level.toUpperCase()}]`.padEnd(7, ' ');
 
-        logEntry.innerHTML = `<span class="log-timestamp">${timestamp}</span> <span class="log-level log-${log.level}">${levelFormatted}</span> <span class="log-message">${log.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
+        // Create elements manually to avoid innerHTML issues and preserve formatting
+        const timestampSpan = document.createElement('span');
+        timestampSpan.className = 'log-timestamp';
+        timestampSpan.textContent = timestamp;
+
+        const levelSpan = document.createElement('span');
+        levelSpan.className = `log-level log-${log.level}`;
+        levelSpan.textContent = levelFormatted;
+
+        const messageSpan = document.createElement('span');
+        messageSpan.className = 'log-message';
+        messageSpan.textContent = log.message; // textContent automatically handles escaping
+
+        logEntry.appendChild(timestampSpan);
+        logEntry.appendChild(document.createTextNode(' ')); // Add space
+        logEntry.appendChild(levelSpan);
+        logEntry.appendChild(document.createTextNode(' ')); // Add space
+        logEntry.appendChild(messageSpan);
         
-        const isScrolledToBottom = logBox.scrollHeight - logBox.clientHeight <= logBox.scrollTop + 1;
-        
+        // Añadir nueva entrada de log
         logBox.appendChild(logEntry);
+
+        // Mantener solo los 30 mensajes más recientes
+        const maxLogEntries = 30;
+        while (logBox.children.length > maxLogEntries) {
+            logBox.removeChild(logBox.firstChild);
+        }
+
+        const isScrolledToBottom = logBox.scrollHeight - logBox.clientHeight <= logBox.scrollTop + 1;
         
         if (isScrolledToBottom) {
             logBox.scrollTop = logBox.scrollHeight;
         }
     });
+
+    if (btnLogoutWhatsapp) {
+        btnLogoutWhatsapp.addEventListener('click', () => {
+            if (confirm('¿Estás seguro de que quieres cerrar la sesión de WhatsApp? Esto requerirá escanear un nuevo código QR.')) {
+                console.log('Solicitando cierre de sesión de WhatsApp...');
+                socket.emit('logout_whatsapp');
+            }
+        });
+    }
+
+    // New event listener for the "Refresh QR" button
+    if (btnRefreshQr) {
+        btnRefreshQr.addEventListener('click', () => {
+            if (confirm('¿Estás seguro de que quieres actualizar el código QR? Esto cerrará la sesión actual de WhatsApp y generará un nuevo QR.')) {
+                console.log('Solicitando actualización del código QR...');
+                socket.emit('request_qr_refresh');
+            }
+        });
+    }
 
     if (testMessageForm) {
         testMessageForm.addEventListener('submit', (e) => {
