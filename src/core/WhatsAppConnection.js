@@ -200,6 +200,28 @@ class WhatsAppConnection {
     }
 
     const disconnectReason = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
+
+    // Special handling for QR code timeout or failed link
+    if (disconnectReason === DisconnectReason.timedOut && this.currentQR) {
+      logger.warn('[WA_CONNECTION] QR code scan timed out or failed. Cleaning session to generate a new QR.');
+      this.currentQR = null;
+      if (this.io) {
+        this.io.emit('qr_update', null);
+        this.io.emit('status_update', { isReady: false, isConnecting: true, message: 'QR expirado. Generando uno nuevo...' });
+      }
+      
+      await this.sessionManager.cleanupSession();
+      
+      this.resetRetryState();
+      setTimeout(() => {
+        logger.info('[WA_CONNECTION] Reconnecting to get a new QR code...');
+        this.connect().catch(err => {
+          logger.error('[WA_CONNECTION] Error trying to reconnect after QR timeout:', err.message);
+        });
+      }, 1000);
+      return; // Stop further processing
+    }
+
     const shouldReconnect = disconnectReason !== DisconnectReason.loggedOut;
     
     logger.warn('[WA_CONNECTION] Conexión cerrada');

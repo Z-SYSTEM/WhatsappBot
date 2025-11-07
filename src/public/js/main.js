@@ -93,11 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
             logBox.removeChild(logBox.firstChild);
         }
 
-        const isScrolledToBottom = logBox.scrollHeight - logBox.clientHeight <= logBox.scrollTop + 1;
-        
-        if (isScrolledToBottom) {
-            logBox.scrollTop = logBox.scrollHeight;
-        }
+        // Scroll to the bottom to show the latest message
+        logBox.scrollTop = logBox.scrollHeight;
     });
 
     if (btnLogoutWhatsapp) {
