@@ -5,6 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Estado del Bot - <%= botName %></title>
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .actions-container .btn-action {
+            padding: 10px 15px;
+            font-size: 1em;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .actions-container .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .btn-start {
+            background-color: #28a745; /* Verde */
+        }
+        .btn-start:hover {
+            background-color: #218838;
+        }
+        .btn-stop {
+            background-color: #dc3545; /* Rojo */
+        }
+        .btn-stop:hover {
+            background-color: #c82333;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -43,6 +72,8 @@
             <a href="/logout" class="btn-logout">Cerrar Sesión UI</a>
             <button id="btn-logout-whatsapp" class="btn-logout btn-logout-whatsapp">Cerrar Sesión WhatsApp</button>
             <button id="btn-refresh-qr" class="btn-logout btn-logout-whatsapp">Actualizar QR</button>
+            <button id="btn-start-bot" class="btn-action btn-start">Iniciar Bot</button>
+            <button id="btn-stop-bot" class="btn-action btn-stop">Detener Bot</button>
         </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>

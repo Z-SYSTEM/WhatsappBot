@@ -1,8 +1,10 @@
-import makeWASocket, { DisconnectReason, useMultiFileAuthState, Browsers } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { logger, logRecovery } from '../logger.js';
+import fs from 'fs-extra';
+import path from 'path';
 // import { generateQRCode } from '../qr-handler.js';
-import { _WHATSAPP_VERSION } from '../constants.js';
+// import { _WHATSAPP_VERSION } from '../constants.js'; // Eliminado: Ya no se usa _WHATSAPP_VERSION
 
 class WhatsAppConnection {
   constructor(config, sessionManager, messageHandler, callHandler, io = null) {
@@ -97,26 +99,53 @@ class WhatsAppConnection {
    * Conecta a WhatsApp
    */
   async connect() {
+    let version;
     try {
       logger.info('[WA_CONNECTION] Iniciando conexión con WhatsApp...');
       
+      // Asegurar que el directorio de sesiones existe y restaurar si está vacío
+      try {
+        await fs.ensureDir(this.config.dirs.sessions);
+        const sessionFiles = await fs.readdir(this.config.dirs.sessions);
+        if (sessionFiles.length === 0) {
+          logger.info('[WA_CONNECTION] Directorio de sesión vacío, intentando restaurar desde backup...');
+          const restored = await this.sessionManager.restore();
+          if (restored) {
+            logger.info('[WA_CONNECTION] Sesión restaurada desde backup exitosamente.');
+          } else {
+            logger.warn('[WA_CONNECTION] No se encontró backup para restaurar. Se requerirá un nuevo escaneo de QR.');
+          }
+        }
+      } catch (e) {
+        logger.error('[WA_CONNECTION] Error al verificar/restaurar directorio de sesión:', e.message);
+      }
+      
       const { state, saveCreds } = await useMultiFileAuthState(this.config.dirs.sessions);
       
-      logger.info(`[WA_CONNECTION] Usando Baileys v6.7.20 (versión estable)`);
+      logger.info(`[WA_CONNECTION] Buscando la versión más reciente de Baileys...`);
       
+      try {
+        const latest = await fetchLatestBaileysVersion();
+        version = latest.version;
+        logger.info(`[WA_CONNECTION] Usando Baileys v${version.join('.')}`);
+      } catch (e) {
+        logger.warn('[WA_CONNECTION] No se pudo obtener la última versión de Baileys, se usará la versión por defecto.', e.message);
+        version = undefined;
+      }
+
       this.sock = makeWASocket({
         auth: state,
         logger: this.baileysLogger,
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'),
-        version: _WHATSAPP_VERSION,
-        syncFullHistory: false,
-        connectTimeoutMs: 60000,
-        defaultQueryTimeoutMs: 60000,
-        keepAliveIntervalMs: 30000,
-        retryRequestDelayMs: 250,
-        markOnlineOnConnect: true,
-        getMessage: async (key) => {
+        browser: Browsers.ubuntu('Desktop'), // Cambiado para mayor compatibilidad
+        version,
+        syncFullHistory: false, // Restaurado
+        connectTimeoutMs: 60000, // Restaurado
+        defaultQueryTimeoutMs: 60000, // Restaurado
+        keepAliveIntervalMs: 30000, // Restaurado
+        retryRequestDelayMs: 250, // Restaurado
+        markOnlineOnConnect: true, // Restaurado a true
+        getMessage: async (key) => { // Restaurado
           return { conversation: '' };
         }
       });
@@ -135,13 +164,20 @@ class WhatsAppConnection {
    * Configura los event handlers
    */
   setupEvents(saveCreds) {
+    // Guardar referencia defensiva de saveCreds en la instancia para uso futuro
+    if (saveCreds && typeof saveCreds === 'function') {
+      this.saveCreds = saveCreds;
+    }
+
     // Manejar eventos de conexión
     this.sock.ev.on('connection.update', async (update) => {
       await this.handleConnectionUpdate(update);
     });
 
-    // Manejar credenciales
-    this.sock.ev.on('creds.update', saveCreds);
+    // Manejar credenciales (guardado automático en cada actualización)
+    if (this.saveCreds) {
+      this.sock.ev.on('creds.update', this.saveCreds);
+    }
 
     // Manejar mensajes entrantes
     this.sock.ev.on('messages.upsert', async (m) => {
@@ -161,11 +197,15 @@ class WhatsAppConnection {
     const { connection, lastDisconnect, qr } = update;
     
     if (this.io) {
+      logger.info('[WA_CONNECTION] INGRESO A IO');
       if (qr) {
         this.currentQR = qr;
         this.io.emit('qr_update', qr);
+
+        logger.info('[WA_CONNECTION] QR Code generado. Ver la interfaz web para escanear.');
       }
       if (connection === 'open') {
+        logger.info('[WA_CONNECTION] INGRESO A OPEN');
         this.currentQR = null;
         this.io.emit('status_update', { isReady: true, isConnecting: false, message: 'Bot conectado exitosamente' });
         this.io.emit('qr_update', null);
@@ -174,10 +214,6 @@ class WhatsAppConnection {
       } else if (connection === 'connecting') {
         this.io.emit('status_update', { isReady: false, isConnecting: true, message: 'Conectando...' });
       }
-    }
-    
-    if (qr) {
-      logger.info('[WA_CONNECTION] QR Code generado. Ver la interfaz web para escanear.');
     }
     
     if (connection === 'close') {
@@ -201,6 +237,22 @@ class WhatsAppConnection {
 
     const disconnectReason = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
 
+    // Detect custom conflict payloads (ej: <conflict type="device_removed"/>)
+    let deviceRemovedConflict = false;
+    try {
+      const content = lastDisconnect?.error?.data?.content;
+      if (Array.isArray(content)) {
+        for (const item of content) {
+          if (item?.tag === 'conflict' && item?.attrs?.type === 'device_removed') {
+            deviceRemovedConflict = true;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore parsing issues
+    }
+
     // Special handling for QR code timeout or failed link
     if (disconnectReason === DisconnectReason.timedOut && this.currentQR) {
       logger.warn('[WA_CONNECTION] QR code scan timed out or failed. Cleaning session to generate a new QR.');
@@ -220,6 +272,24 @@ class WhatsAppConnection {
         });
       }, 1000);
       return; // Stop further processing
+    }
+
+    // If conflict indicates device_removed, treat it as a reconnectable conflict
+    if (deviceRemovedConflict) {
+      logger.warn('[WA_CONNECTION] Conflict detected: device_removed. No se limpiará la sesión; intentando reconectar conservando credenciales.');
+      logger.warn(`[WA_CONNECTION] Detalle conflict payload: ${JSON.stringify(lastDisconnect?.error?.data?.content || {}, null, 2)}`);
+      
+      this.isConnected = false;
+      if (this.onDisconnected) {
+        this.onDisconnected();
+      }
+
+      // Reset socket reference but keep credentials on disk
+      this.sock = null;
+
+      // Attempt a retry but do not cleanup session files (allow phone to complete link)
+      await this.handleRetry('device_removed_conflict', lastDisconnect?.error);
+      return;
     }
 
     const shouldReconnect = disconnectReason !== DisconnectReason.loggedOut;
@@ -249,12 +319,13 @@ class WhatsAppConnection {
     }
     
     if (shouldReconnect) {
+      this.sock = null;
       await this.handleRetry('connection_closed', lastDisconnect?.error);
     } else {
       logger.error('[WA_CONNECTION] Conexión cerrada por logout del usuario. Limpiando sesión para generar nuevo QR.');
       
       // Limpiar la sesión (sin restaurar) para forzar un nuevo QR
-      await this.sessionManager.cleanupCorrupted({ restoreAfter: false });
+      await this.sessionManager.cleanupSession({ restoreAfter: false });
       
       // Resetear el estado de reintentos
       this.resetRetryState();
@@ -278,9 +349,21 @@ class WhatsAppConnection {
     this.isManualLogout = false; // Reset flag on successful connection
     this.resetRetryState();
     logger.info('[WA_CONNECTION] Bot conectado exitosamente');
+
+    // Forzar guardado de credenciales al establecer conexión para asegurar estado
+    if (this.saveCreds) {
+      try {
+        await this.saveCreds();
+        logger.info('[WA_CONNECTION] Estado de autenticación guardado en disco tras conexión exitosa.');
+      } catch (e) {
+        logger.error('[WA_CONNECTION] Error al guardar credenciales en conexión abierta:', e.message);
+      }
+    }
     
     if (this.onConnected) {
       this.onConnected(this.sock);
+
+      //this.sock.ev.on('creds.update', saveCreds);
     }
     
     // Hacer backup de la sesión establecida

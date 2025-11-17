@@ -38,6 +38,7 @@ class WhatsAppBot {
     this.botStatus = {
       isReady: false,
       isConnecting: false,
+      isManuallyStopped: false, // Para prevenir reinicios automáticos del health check
       lastHealthCheck: null,
       lastMessageTimestamp: null,
       restartAttempts: 0,
@@ -143,6 +144,7 @@ class WhatsAppBot {
    */
   async connect() {
     try {
+      this.botStatus.isManuallyStopped = false; // Resetea la detención manual al intentar conectar
       this.botStatus.isConnecting = true;
       this.botStatus.isReady = false;
       
@@ -164,6 +166,9 @@ class WhatsAppBot {
    */
   async disconnect({ isLogout = false } = {}) {
     try {
+      if (isLogout) {
+        this.botStatus.isManuallyStopped = true;
+      }
       await this.connection.disconnect({ isLogout });
       this.botStatus.isReady = false;
       this.botStatus.isConnecting = false;
@@ -237,6 +242,10 @@ class WhatsAppBot {
 
     // Caso 2: El bot no está listo y no se está reconectando. Puede que la reconexión automática fallara.
     if (!isBotReady && !this.botStatus.isConnecting && !this.connection.isReconnecting) {
+        if (this.botStatus.isManuallyStopped) {
+          logger.debug('[HEALTH_CHECK] El bot está detenido manualmente, el health check no lo reiniciará.');
+          return;
+        }
         logger.warn('[HEALTH_CHECK] El bot no está conectado y no parece estar reconectando. Iniciando conexión...');
         await this.connect().catch(e => logger.error('[HEALTH_CHECK] Error al intentar conectar desde health check:', e.message));
         return;

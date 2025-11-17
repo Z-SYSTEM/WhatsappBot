@@ -187,6 +187,34 @@ async function startServer() {
             await bot.logout(); // Reuse logout logic to force new QR
         }
       });
+
+      // Listeners to start/stop the bot from the UI
+      socket.on('start_bot', async () => {
+        logger.info('[WEB_UI] Solicitud de inicio de bot recibida.');
+        if (bot && !bot.isReady()) {
+            try {
+                await bot.connect();
+            } catch (error) {
+                logger.error('[WEB_UI] Error al intentar iniciar el bot:', error.message);
+            }
+        } else if (bot && bot.isReady()) {
+            logger.warn('[WEB_UI] Se intentó iniciar un bot que ya está conectado.');
+        }
+      });
+
+      socket.on('stop_bot', async () => {
+        logger.info('[WEB_UI] Solicitud para detener el bot recibida.');
+        if (bot && bot.isReady()) {
+            try {
+                // Se pasa isLogout: true para indicar una detención manual y prevenir la reconexión automática.
+                await bot.disconnect({ isLogout: true });
+            } catch (error) {
+                logger.error('[WEB_UI] Error al detener el bot:', error.message);
+            }
+        } else {
+            logger.warn('[WEB_UI] Se intentó detener un bot que no está conectado.');
+        }
+      });
     });
   }
   

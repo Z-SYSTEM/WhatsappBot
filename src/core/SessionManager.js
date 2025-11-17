@@ -119,7 +119,9 @@ class SessionManager {
     try {
       logger.info('[SESSION_MANAGER] Limpiando sesión actual para logout...');
       await fs.remove(this.sessionPath);
+      await fs.remove(this.backupDir);
       await fs.ensureDir(this.sessionPath);
+      await fs.ensureDir(this.backupDir);
       logger.info('[SESSION_MANAGER] Directorio de sesión limpiado.');
     } catch (error) {
       logger.error('[SESSION_MANAGER] Error limpiando la sesión:', error.message);

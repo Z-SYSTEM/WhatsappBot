@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const testMessageStatus = document.getElementById('test-message-status');
     const btnLogoutWhatsapp = document.getElementById('btn-logout-whatsapp');
     const btnRefreshQr = document.getElementById('btn-refresh-qr'); // Get the new button
+    const btnStartBot = document.getElementById('btn-start-bot');
+    const btnStopBot = document.getElementById('btn-stop-bot');
 
     let qr = null;
 
@@ -112,6 +114,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (confirm('¿Estás seguro de que quieres actualizar el código QR? Esto cerrará la sesión actual de WhatsApp y generará un nuevo QR.')) {
                 console.log('Solicitando actualización del código QR...');
                 socket.emit('request_qr_refresh');
+            }
+        });
+    }
+
+    if (btnStartBot) {
+        btnStartBot.addEventListener('click', () => {
+            console.log('Solicitando inicio del bot...');
+            socket.emit('start_bot');
+        });
+    }
+
+    if (btnStopBot) {
+        btnStopBot.addEventListener('click', () => {
+            if (confirm('¿Estás seguro de que quieres detener el bot? La conexión con WhatsApp se cerrará.')) {
+                console.log('Solicitando detención del bot...');
+                socket.emit('stop_bot');
             }
         });
     }
