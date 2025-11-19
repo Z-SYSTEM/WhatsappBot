@@ -7,7 +7,6 @@ const config = {
   // Bot and Server configuration
   botName: process.env.BOT_NAME || 'WhatsAppBot',
   port: process.env.PORT || 4002,
-  portWeb: process.env.PORT_WEB || 4003,
   tokenAccess: process.env.TOKENACCESS,
 
   // Web UI Credentials
@@ -17,9 +16,6 @@ const config = {
 
   // Webhooks
   onMessage: process.env.ONMESSAGE,
-
-  // FCM Notifications
-  fcmDeviceToken: process.env.FCM_DEVICE_TOKEN,
 
   // Call handling
   acceptCall: process.env.ACCEPT_CALL === 'TRUE',

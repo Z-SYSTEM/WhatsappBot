@@ -1,5 +1,4 @@
 import express from 'express';
-import http from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,10 +8,9 @@ import { logger } from '../logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(path.dirname(__filename)); // up to src/
 
-export function createWebServer(config) {
-  logger.info(`[WEB_UI] Creando servidor web en puerto ${config.portWeb}...`);
-  const app = express();
-  const server = http.createServer(app);
+export function setupWebUI(app, server, config) {
+  logger.info('[WEB_UI] Configurando interfaz web...');
+  
   const io = new Server(server);
 
   // Session Middleware
@@ -68,20 +66,7 @@ export function createWebServer(config) {
     });
   });
 
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      logger.error(`[WEB_UI] El puerto ${config.portWeb} ya está en uso.`);
-      logger.error('[WEB_UI] Por favor, libera el puerto o cambia PORT_WEB en el archivo .env');
-      process.exit(1);
-    } else {
-      logger.error('[WEB_UI] Error en el servidor web:', err.message);
-      process.exit(1);
-    }
-  });
+  logger.info('[WEB_UI] Interfaz web configurada correctamente');
 
-  server.listen(config.portWeb, () => {
-    logger.info(`[WEB_UI] Interfaz web iniciada en http://localhost:${config.portWeb}`);
-  });
-
-  return { app, server, io };
+  return io;
 }

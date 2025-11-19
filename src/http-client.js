@@ -4,7 +4,6 @@ import { logger } from './logger.js';
 class HttpClient {
   constructor() {
     // Constantes de endpoints
-    this._FCM_ENDPOINT = 'https://fcm.googleapis.com/fcm/send';
     this._CONNECTIVITY_TEST_URL = 'https://www.google.com';
     
     // Configuraciones por defecto para diferentes tipos de requests
@@ -82,34 +81,6 @@ class HttpClient {
     } catch (error) {
       logger.error(`[HTTP_CLIENT] Error enviando webhook a ${url}:`, error.message);
       logger.error(`[HTTP_CLIENT] Datos enviados:`, JSON.stringify(data, null, 2));
-      return this._createResponse(false, error.response?.status || 500, 'error', null, error.message);
-    }
-  }
-
-  /**
-   * Envía notificación FCM
-   * @param {string} deviceToken - Token del dispositivo FCM
-   * @param {object} notificationData - Datos de la notificación
-   * @returns {Promise<object>} Respuesta estandarizada
-   */
-  async sendFCMNotification(deviceToken, notificationData) {
-    try {
-      logger.debug('[HTTP_CLIENT] Enviando notificación FCM');
-
-      const config = {
-        ...this._DEFAULT_CONFIG,
-        headers: {
-          'Authorization': `key=${deviceToken}`,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      const response = await axios.post(this._FCM_ENDPOINT, notificationData, config);
-      
-      logger.info('[HTTP_CLIENT] Notificación FCM enviada exitosamente');
-      return this._createResponse(true, response.status, 'ok', response.data);
-    } catch (error) {
-      logger.error('[HTTP_CLIENT] Error enviando notificación FCM:', error.message);
       return this._createResponse(false, error.response?.status || 500, 'error', null, error.message);
     }
   }

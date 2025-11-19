@@ -1,18 +1,18 @@
 # WhatsApp Bot
 
-Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST para enviar mensajes, obtener información de contactos y gestionar la conexión con WhatsApp.
+Bot de WhatsApp desarrollado con Node.js y Baileys que proporciona una API REST e interfaz web para enviar mensajes, obtener información de contactos y gestionar la conexión con WhatsApp.
 
 ## Características
 
 ### **Características Principales**
 - ✅ Conexión automática a WhatsApp Web usando Baileys
 - ✅ API REST completa para envío de mensajes y gestión
-- ✅ Sistema de autenticación por token Bearer
+- ✅ Interfaz web para monitoreo y control en tiempo real
+- ✅ Sistema de autenticación por token Bearer (API) y usuario/contraseña (Web UI)
 - ✅ Health checks automáticos cada 5 minutos
 - ✅ Sistema de logs avanzado con rotación diaria y compresión
 - ✅ Reconexión automática inteligente con backoff exponencial
 - ✅ Validación robusta de datos de entrada
-- ✅ Notificaciones FCM (opcional)
 
 ### **Gestión de Sesiones**
 - ✅ Conexión directa sin validaciones complejas (Baileys maneja internamente)
@@ -113,22 +113,22 @@ Copia el archivo `env.example` a `.env` y configura las siguientes variables:
 # Nombre del bot
 BOT_NAME=MiBot
 
-# Puerto del servidor
+# Puerto del servidor (API REST + Interfaz Web)
 PORT=4002
 
 # Token de autenticación para la API
 TOKENACCESS=tu_token_secreto_aqui
+
+# Credenciales de la interfaz web
+WEB_USER=admin
+WEB_PASSWORD=admin
+SESSION_SECRET=una_clave_secreta_aleatoria_larga
 ```
 
 #### Webhooks (Opcional)
 ```env
 # URL para recibir notificaciones de mensajes entrantes
 ONMESSAGE=https://tu-servidor.com/webhook/message
-
-#### Notificaciones FCM (Opcional)
-```env
-# Token del dispositivo para notificaciones push
-FCM_DEVICE_TOKEN=tu_fcm_device_token_aqui
 ```
 
 #### Health Check
@@ -251,6 +251,53 @@ GET /api/contact?phoneNumber=+1234567890
   }
 }
 ```
+
+## Interfaz Web
+
+El bot incluye una interfaz web integrada para monitoreo y control en tiempo real.
+
+### Acceso
+
+La interfaz web está disponible en la misma URL base del servidor:
+
+```
+http://localhost:4002/
+```
+
+**Credenciales por defecto:**
+- Usuario: `admin`
+- Contraseña: `admin`
+
+⚠️ **IMPORTANTE:** Cambia estas credenciales en el archivo `.env` antes de usar en producción.
+
+### Funcionalidades
+
+#### Panel de Control
+- **Estado del Bot:** Visualización en tiempo real del estado de conexión
+- **Código QR:** Escaneo directo desde la interfaz para vincular WhatsApp
+- **Logs en Vivo:** Visualización de logs del sistema en tiempo real
+- **Control de Conexión:** Botones para iniciar/detener el bot
+- **Envío de Mensajes de Prueba:** Interfaz para probar el envío de mensajes
+
+#### Seguridad
+- Autenticación mediante usuario y contraseña
+- Sesiones seguras con express-session
+- Socket.IO protegido (solo usuarios autenticados pueden conectarse)
+
+### Endpoints de la Interfaz Web
+
+- `GET /` - Panel principal (requiere autenticación)
+- `GET /login` - Página de inicio de sesión
+- `POST /login` - Procesar inicio de sesión
+- `GET /logout` - Cerrar sesión
+
+### Arquitectura Unificada
+
+La API REST y la interfaz web corren en el mismo puerto (`PORT=4002`), lo que simplifica la configuración:
+
+- **API REST:** `http://localhost:4002/api/*`
+- **Interfaz Web:** `http://localhost:4002/`
+- **Socket.IO:** `http://localhost:4002` (WebSocket)
 
 ## Códigos de Error
 

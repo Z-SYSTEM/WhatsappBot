@@ -18,15 +18,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnClearLog = document.getElementById('btn-clear-log');
 
     let qr = null;
+    let currentState = {
+        isReady: false,
+        isConnecting: false,
+        hasQR: false
+    };
+
+    /**
+     * Actualiza la visibilidad de los botones según el estado del bot
+     */
+    function updateButtonVisibility() {
+        // Bot conectado: mostrar "Detener Bot" y "Cerrar Sesión WhatsApp"
+        if (currentState.isReady) {
+            if (btnStartBot) btnStartBot.style.display = 'none';
+            if (btnStopBot) btnStopBot.style.display = 'inline-block';
+            if (btnLogoutWhatsapp) btnLogoutWhatsapp.style.display = 'inline-block';
+        }
+        // Bot conectando (esperando QR): ocultar todos los botones de acción
+        else if (currentState.isConnecting || currentState.hasQR) {
+            if (btnStartBot) btnStartBot.style.display = 'none';
+            if (btnStopBot) btnStopBot.style.display = 'none';
+            if (btnLogoutWhatsapp) btnLogoutWhatsapp.style.display = 'none';
+        }
+        // Bot desconectado: mostrar solo "Iniciar Bot"
+        else {
+            if (btnStartBot) btnStartBot.style.display = 'inline-block';
+            if (btnStopBot) btnStopBot.style.display = 'none';
+            if (btnLogoutWhatsapp) btnLogoutWhatsapp.style.display = 'none';
+        }
+    }
 
     socket.on('connect', () => {
         console.log('Conectado al servidor de UI');
+        // Inicializar visibilidad de botones
+        updateButtonVisibility();
     });
 
     socket.on('status_update', (data) => {
         console.log('Actualización de estado:', data);
         statusText.textContent = data.message;
         statusIndicator.className = 'status-indicator'; // Reset classes
+
+        // Actualizar estado actual
+        currentState.isReady = data.isReady || false;
+        currentState.isConnecting = data.isConnecting || false;
 
         if (data.isReady) {
             statusIndicator.classList.add('connected');
@@ -39,11 +74,15 @@ document.addEventListener('DOMContentLoaded', () => {
             statusIndicator.classList.add('disconnected');
             if (testMessageContainer) testMessageContainer.style.display = 'none';
         }
+
+        // Actualizar visibilidad de botones
+        updateButtonVisibility();
     });
 
     socket.on('qr_update', (qrCode) => {
         if (qrCode) {
             console.log('QR recibido');
+            currentState.hasQR = true;
             qrContainer.style.display = 'block';
             if (qr) {
                 qr.value = qrCode;
@@ -59,8 +98,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             console.log('QR borrado');
+            currentState.hasQR = false;
             qrContainer.style.display = 'none';
         }
+
+        // Actualizar visibilidad de botones cuando cambia el estado del QR
+        updateButtonVisibility();
     });
 
     socket.on('log_entry', (log) => {
@@ -160,5 +203,11 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Desconectado del servidor de UI');
         statusText.textContent = 'Conexión con el servidor perdida';
         statusIndicator.className = 'status-indicator disconnected';
+        
+        // Resetear estado y ocultar todos los botones de acción cuando se pierde conexión con el servidor
+        currentState.isReady = false;
+        currentState.isConnecting = false;
+        currentState.hasQR = false;
+        updateButtonVisibility();
     });
 });
