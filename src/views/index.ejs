@@ -6,6 +6,12 @@
     <title>Estado del Bot - <%= botName %></title>
     <link rel="stylesheet" href="/css/style.css">
     <style>
+        /* Aumenta el ancho del contenedor principal para que las columnas tengan más espacio */
+        .container {
+            max-width: 1400px;
+        }
+        
+        /* Estilos de Botones de Acción */
         .actions-container .btn-action {
             padding: 10px 15px;
             font-size: 1em;
@@ -33,47 +39,123 @@
         .btn-stop:hover {
             background-color: #c82333;
         }
+
+        /* --- Nuevo Diseño Principal (Grid Layout) --- */
+        .main-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* Dos columnas de igual tamaño */
+            gap: 2rem;
+            align-items: start; /* Alinea los elementos al inicio de su celda */
+        }
+
+        /* Header for the log column */
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .log-header h2 {
+            margin: 0;
+        }
+        .btn-clear-log {
+            padding: 6px 12px;
+            font-size: 0.9em;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .btn-clear-log:hover {
+            background-color: #5a6268;
+        }
+
+        /* Columna que contiene la caja de logs */
+        .log-column {
+            height: 85vh; /* Altura fija para la columna del log */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Contenedor del título y la caja de logs */
+        .log-container {
+            flex-grow: 1; /* Permite que crezca para llenar .log-column */
+            display: flex;
+            flex-direction: column;
+            min-height: 0; /* Necesario para que el scroll funcione en un hijo de flex */
+        }
+
+        /* La caja de logs con scroll */
+        #log-box {
+            flex-grow: 1; /* Ocupa el espacio restante en .log-container */
+            overflow-y: auto; /* Habilita el scroll vertical cuando es necesario */
+        }
+
+        /* Oculta el formulario de prueba por defecto */
+        .test-message-container {
+            display: none;
+        }
+        
+        /* Responsivo: apila las columnas en pantallas pequeñas */
+        @media (max-width: 900px) {
+            .main-wrapper {
+                grid-template-columns: 1fr; /* Diseño de una sola columna */
+            }
+            .log-column {
+                height: 50vh; /* Altura ajustada para la vista apilada */
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Estado del Bot: <%= botName %></h1>
-        <div id="status-container">
-            <div id="status-indicator" class="disconnected"></div>
-            <p id="status-text">Desconectado</p>
-        </div>
-        <div id="qr-container">
-            <p>Escanea el código QR para conectar</p>
-            <canvas id="qr-canvas"></canvas>
-        </div>
-
-        <div class="test-message-container">
-            <h2>Enviar Mensaje de Prueba</h2>
-            <form id="test-message-form">
-                <div class="form-group">
-                    <label for="test-phone">Número de Teléfono (ej: 5491122334455)</label>
-                    <input type="text" id="test-phone" name="phone" required placeholder="549...">
+        <div class="main-wrapper">
+            <div class="content-column">
+                <div id="status-container">
+                    <div id="status-indicator" class="disconnected"></div>
+                    <p id="status-text">Desconectado</p>
                 </div>
-                <div class="form-group">
-                    <label for="test-message">Mensaje</label>
-                    <textarea id="test-message" name="message" rows="2" required>Este es un mensaje de prueba.</textarea>
+                <div id="qr-container">
+                    <p>Escanea el código QR para conectar</p>
+                    <canvas id="qr-canvas"></canvas>
                 </div>
-                <button type="submit" class="btn-send-test">Enviar Prueba</button>
-            </form>
-            <div id="test-message-status"></div>
-        </div>
 
-        <div class="log-container">
-            <h2>Log en Tiempo Real</h2>
-            <div id="log-box"></div>
-        </div>
+                <div class="test-message-container">
+                    <h2>Enviar Mensaje de Prueba</h2>
+                    <form id="test-message-form">
+                        <div class="form-group">
+                            <label for="test-phone">Número de Teléfono (ej: 5491122334455)</label>
+                            <input type="text" id="test-phone" name="phone" required placeholder="549...">
+                        </div>
+                        <div class="form-group">
+                            <label for="test-message">Mensaje</label>
+                            <textarea id="test-message" name="message" rows="2" required>Este es un mensaje de prueba.</textarea>
+                        </div>
+                        <button type="submit" class="btn-send-test">Enviar Prueba</button>
+                    </form>
+                    <div id="test-message-status"></div>
+                </div>
 
-        <div class="actions-container">
-            <a href="/logout" class="btn-logout">Cerrar Sesión UI</a>
-            <button id="btn-logout-whatsapp" class="btn-logout btn-logout-whatsapp">Cerrar Sesión WhatsApp</button>
-            <button id="btn-refresh-qr" class="btn-logout btn-logout-whatsapp">Actualizar QR</button>
-            <button id="btn-start-bot" class="btn-action btn-start">Iniciar Bot</button>
-            <button id="btn-stop-bot" class="btn-action btn-stop">Detener Bot</button>
+                <div class="actions-container">
+                    <a href="/logout" class="btn-logout">Cerrar Sesión UI</a>
+                    <button id="btn-logout-whatsapp" class="btn-logout btn-logout-whatsapp">Cerrar Sesión WhatsApp</button>
+                    <button id="btn-start-bot" class="btn-action btn-start">Iniciar Bot</button>
+                    <button id="btn-stop-bot" class="btn-action btn-stop">Detener Bot</button>
+                </div>
+            </div>
+
+            <div class="log-column">
+                <div class="log-container">
+                    <div class="log-header">
+                        <h2>Log en Tiempo Real</h2>
+                        <button id="btn-clear-log" class="btn-clear-log">Limpiar Log</button>
+                    </div>
+                    <div id="log-box"></div>
+                </div>
+            </div>
         </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>

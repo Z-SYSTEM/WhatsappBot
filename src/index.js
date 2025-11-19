@@ -180,14 +180,6 @@ async function startServer() {
         }
       });
 
-      // New Socket.IO event listener for manual QR refresh
-      socket.on('request_qr_refresh', async () => {
-        logger.info('[WEB_UI] Solicitud de actualización de QR recibida.');
-        if (bot) {
-            await bot.logout(); // Reuse logout logic to force new QR
-        }
-      });
-
       // Listeners to start/stop the bot from the UI
       socket.on('start_bot', async () => {
         logger.info('[WEB_UI] Solicitud de inicio de bot recibida.');

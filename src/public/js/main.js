@@ -10,11 +10,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const qrCanvas = document.getElementById('qr-canvas');
     const logBox = document.getElementById('log-box');
     const testMessageForm = document.getElementById('test-message-form');
+    const testMessageContainer = document.querySelector('.test-message-container');
     const testMessageStatus = document.getElementById('test-message-status');
     const btnLogoutWhatsapp = document.getElementById('btn-logout-whatsapp');
-    const btnRefreshQr = document.getElementById('btn-refresh-qr'); // Get the new button
     const btnStartBot = document.getElementById('btn-start-bot');
     const btnStopBot = document.getElementById('btn-stop-bot');
+    const btnClearLog = document.getElementById('btn-clear-log');
 
     let qr = null;
 
@@ -30,10 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.isReady) {
             statusIndicator.classList.add('connected');
             qrContainer.style.display = 'none';
+            if (testMessageContainer) testMessageContainer.style.display = 'block';
         } else if (data.isConnecting) {
             statusIndicator.classList.add('connecting');
+            if (testMessageContainer) testMessageContainer.style.display = 'none';
         } else {
             statusIndicator.classList.add('disconnected');
+            if (testMessageContainer) testMessageContainer.style.display = 'none';
         }
     });
 
@@ -101,20 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnLogoutWhatsapp) {
         btnLogoutWhatsapp.addEventListener('click', () => {
-            if (confirm('¿Estás seguro de que quieres cerrar la sesión de WhatsApp? Esto requerirá escanear un nuevo código QR.')) {
-                console.log('Solicitando cierre de sesión de WhatsApp...');
-                socket.emit('logout_whatsapp');
-            }
-        });
-    }
-
-    // New event listener for the "Refresh QR" button
-    if (btnRefreshQr) {
-        btnRefreshQr.addEventListener('click', () => {
-            if (confirm('¿Estás seguro de que quieres actualizar el código QR? Esto cerrará la sesión actual de WhatsApp y generará un nuevo QR.')) {
-                console.log('Solicitando actualización del código QR...');
-                socket.emit('request_qr_refresh');
-            }
+            console.log('Solicitando cierre de sesión de WhatsApp...');
+            socket.emit('logout_whatsapp');
         });
     }
 
@@ -127,9 +119,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnStopBot) {
         btnStopBot.addEventListener('click', () => {
-            if (confirm('¿Estás seguro de que quieres detener el bot? La conexión con WhatsApp se cerrará.')) {
-                console.log('Solicitando detención del bot...');
-                socket.emit('stop_bot');
+            console.log('Solicitando detención del bot...');
+            socket.emit('stop_bot');
+        });
+    }
+
+    if (btnClearLog) {
+        btnClearLog.addEventListener('click', () => {
+            if (logBox) {
+                logBox.innerHTML = ''; // Limpia la caja de logs
             }
         });
     }

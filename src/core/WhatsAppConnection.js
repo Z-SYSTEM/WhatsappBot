@@ -48,7 +48,8 @@ class WhatsAppConnection {
       'No matching sessions found for message',
       'Invalid PreKey ID',
       'No session record',
-      'No session found to decrypt message'
+      'No session found to decrypt message',
+      'no name present, ignoring presence update request'
     ];
     
     const getMessageText = (data) => {
