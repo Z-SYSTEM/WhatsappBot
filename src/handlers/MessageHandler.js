@@ -146,10 +146,8 @@ class MessageHandler {
     messageData.isForwarded = this.isMessageForwarded(msg.message.imageMessage);
     
     try {
-      logger.debug(`[MESSAGE_HANDLER] Descargando imagen para ${messageData.phoneNumber}`);
       const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber);
       messageData.data.data = base64Data;
-      logger.debug(`[MESSAGE_HANDLER] Imagen descargada exitosamente`);
     } catch (error) {
       logger.error(`[MESSAGE_HANDLER] Error descargando imagen: ${error.message}`);
     }
@@ -294,20 +292,8 @@ class MessageHandler {
    * Procesa mensajes no soportados
    */
   processUnsupportedMessage(msg, messageData) {
-    const unsupportedTypes = Object.keys(msg.message).filter(key => 
-      !['conversation', 'extendedTextMessage', 'imageMessage', 'videoMessage', 
-        'audioMessage', 'documentMessage', 'stickerMessage', 'locationMessage', 
-        'contactMessage', 'contactsArrayMessage', 'protocolMessage'].includes(key)
-    );
-    
-    logger.warn(`[MESSAGE_HANDLER] Mensaje de tipo no soportado recibido de ${messageData.phoneNumber}`);
-    logger.warn(`[MESSAGE_HANDLER] Tipos detectados: ${unsupportedTypes.join(', ')}`);
-    
-    logMessage.ignored({
-      ...messageData,
-      unsupportedTypes: unsupportedTypes,
-      allTypes: Object.keys(msg.message)
-    }, 'tipo_no_soportado');
+    // Ignorar silenciosamente mensajes no soportados
+    logger.debug(`[MESSAGE_HANDLER] Mensaje de tipo no soportado ignorado de ${messageData.phoneNumber}`);
   }
 
   /**
@@ -319,8 +305,6 @@ class MessageHandler {
     }
 
     try {
-      logger.debug(`[MESSAGE_HANDLER] Enviando webhook a ${this.onMessageUrl} - Tipo: ${messageData.type} - De: ${messageData.phoneNumber}`);
-      
       // Crear una copia limpia de los datos
       const webhookData = {
         phoneNumber: messageData.phoneNumber,
@@ -344,8 +328,6 @@ class MessageHandler {
       
       // Enviar webhook
       await this.httpClient.sendWebhook(this.onMessageUrl, webhookData, this.logOnMessageRequest);
-      
-      logger.debug(`[MESSAGE_HANDLER] Webhook enviado exitosamente para ${messageData.phoneNumber}`);
     } catch (error) {
       logger.error('[MESSAGE_HANDLER] Error enviando webhook:', error.message);
     }

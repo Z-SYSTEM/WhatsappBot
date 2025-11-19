@@ -295,8 +295,6 @@ class MessageSender {
       }
 
       // Log del mensaje enviado con su contenido usando el helper
-      logger.debug(`[MESSAGE_SENDER] Message ID: ${sentMessage.key.id}`);
-    
       logMessage.sent({ phoneNumber: phone, type: type, body: message }); // Usar el helper logMessage.sent
       return { success: true, messageId: sentMessage.key.id };
 

@@ -271,8 +271,6 @@ class WhatsAppBot {
           }
         }
 
-        logger.info('[HEALTH_CHECK] El bot está saludable (chequeo de presencia y silencio OK).');
-
       } catch (e) {
         logger.error(`[HEALTH_CHECK] ¡FALLO! Chequeo de presencia falló: ${e.message}. Forzando reconexión...`);
         await this.reconnect();

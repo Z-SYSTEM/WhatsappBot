@@ -198,7 +198,6 @@ class WhatsAppConnection {
     const { connection, lastDisconnect, qr } = update;
     
     if (this.io) {
-      logger.info('[WA_CONNECTION] INGRESO A IO');
       if (qr) {
         this.currentQR = qr;
         this.io.emit('qr_update', qr);
@@ -206,7 +205,6 @@ class WhatsAppConnection {
         logger.info('[WA_CONNECTION] QR Code generado. Ver la interfaz web para escanear.');
       }
       if (connection === 'open') {
-        logger.info('[WA_CONNECTION] INGRESO A OPEN');
         this.currentQR = null;
         this.io.emit('status_update', { isReady: true, isConnecting: false, message: 'Bot conectado exitosamente' });
         this.io.emit('qr_update', null);
@@ -379,15 +377,10 @@ class WhatsAppConnection {
   async handleMessagesUpsert(m) {
     const msg = m.messages[0];
     
-    // Log crudo para depuración
-    if (msg) {
-        logger.debug(`[WA_CONNECTION] Raw message content: ${JSON.stringify(msg, null, 2)}`);
-    } else {
-        logger.debug(`[WA_CONNECTION] Received empty messages.upsert event: ${JSON.stringify(m, null, 2)}`);
+    if (!msg) {
+        logger.debug(`[WA_CONNECTION] Received empty messages.upsert event`);
         return;
     }
-    
-    logger.debug(`[WA_CONNECTION] Mensaje recibido de ${msg.key.remoteJid}, fromMe: ${msg.key.fromMe}, tipo: ${Object.keys(msg.message || {}).join(', ')}`);
     
     // Filtrar mensajes: procesar mensajes de chat individual y grupos, pero no status
     if (!msg.key.fromMe && msg.message && !msg.key.remoteJid.includes('@broadcast')) {

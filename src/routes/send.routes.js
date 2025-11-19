@@ -45,8 +45,6 @@ function setupSendRoutes(bot, authenticateToken) {
         }
         chatId = cleanPhone + "@c.us";
       }
-      
-      logger.info(`[SEND_ROUTE] Looking up WhatsApp ID for ${chatId}`);
 
       // Control de destinatarios no válidos
       if (chatId === 'status@c.us' || chatId === 'status@broadcast') {

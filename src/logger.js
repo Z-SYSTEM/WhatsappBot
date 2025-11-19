@@ -84,37 +84,26 @@ const tempLogData = {};
 // Funciones de logging optimizadas que reutilizan objetos
 const logMessage = {
   received: (messageData) => {
-    tempLogData.type = messageData.type;
-    tempLogData.phoneNumber = messageData.phoneNumber;
-    tempLogData.hasMedia = messageData.hasMedia;
-    tempLogData.timestamp = new Date().toISOString();
-    
     // Crear mensaje descriptivo con remitente y contenido
-    let logMessage = `[MESSAGE_HANDLER] Mensaje recibido de ${messageData.phoneNumber}`; // Añadir prefijo
+    let logMessage = `📥 ${messageData.phoneNumber}`;
     
     if (messageData.body && messageData.body.trim()) {
       logMessage += `: "${messageData.body}"`;
     } else if (messageData.type !== 'chat') {
-      logMessage += ` (Tipo: ${messageData.type})`; // Clarificar "Tipo"
+      logMessage += ` (${messageData.type})`;
     }
     
-    logger.info(logMessage, tempLogData);
+    logger.info(logMessage);
   },
   
   sent: (messageData) => {
-    tempLogData.type = messageData.type;
-    tempLogData.phoneNumber = messageData.phoneNumber;
-    tempLogData.success = true;
-    tempLogData.timestamp = new Date().toISOString();
-    tempLogData.body = messageData.body; // Añadir el cuerpo del mensaje
-    
-    let logMsg = `[MESSAGE_SENDER] Mensaje enviado a ${messageData.phoneNumber}`; // Añadir prefijo
+    let logMsg = `📤 ${messageData.phoneNumber}`;
     if (messageData.body && messageData.body.trim()) {
       logMsg += `: "${messageData.body}"`;
     } else {
-      logMsg += ` (Tipo: ${messageData.type})`;
+      logMsg += ` (${messageData.type})`;
     }
-    logger.info(logMsg, tempLogData);
+    logger.info(logMsg);
   },
   
   failed: (messageData, error) => {
