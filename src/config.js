@@ -21,8 +21,12 @@ const config = {
   acceptCall: process.env.ACCEPT_CALL === 'TRUE',
 
   // Health Check
-  healthCheckInterval: parseInt(process.env.HEALTH_CHECK_INTERVAL_SECONDS, 10) || 30,
+  healthCheckInterval: parseInt(process.env.HEALTH_CHECK_INTERVAL_SECONDS, 10) || 15,
   healthCheckMaxSilenceMinutes: parseInt(process.env.HEALTH_CHECK_MAX_SILENCE_MINUTES, 10) || 10,
+
+  // Message sending retry configuration
+  messageRetryWaitMs: parseInt(process.env.MESSAGE_RETRY_WAIT_MS, 10) || 5000,
+  messageRetryPollIntervalMs: 500,
 
   // Directories
   dirs: {

@@ -97,6 +97,9 @@ class WhatsAppBot {
         logger.warn('[WHATSAPP_BOT] Conexión perdida.');
         this.botStatus.isReady = false;
         this.botStatus.isConnecting = true; // Asumimos que intentará reconectar
+        // Limpiar messageSender para evitar usar socket muerto
+        this.messageSender = null;
+        logger.debug('[WHATSAPP_BOT] MessageSender limpiado debido a desconexión.');
       };
       
       // Crear CallHandler con el socket (que se actualizará después de conectar)
@@ -125,6 +128,12 @@ class WhatsAppBot {
   updateHandlers(sock) {
     logger.info('[WHATSAPP_BOT] Conexión establecida. Actualizando handlers...');
     
+    // Limpiar MessageSender anterior si existe
+    if (this.messageSender) {
+      logger.debug('[WHATSAPP_BOT] Limpiando MessageSender anterior...');
+      this.messageSender = null;
+    }
+    
     // Crear MessageSender con el nuevo socket
     this.messageSender = new MessageSender(
       sock,
@@ -137,6 +146,8 @@ class WhatsAppBot {
 
     this.botStatus.isReady = true;
     this.botStatus.isConnecting = false;
+    
+    logger.info('[WHATSAPP_BOT] Handlers actualizados correctamente. Bot listo para enviar mensajes.');
   }
 
   /**
@@ -281,21 +292,48 @@ class WhatsAppBot {
   }
 
   /**
-   * Envía un mensaje
+   * Envía un mensaje con lógica de espera y retry
    */
   async sendMessage(data) {
-    if (!this.isReady()) {
-      throw new Error('Bot no está conectado');
+    const maxWaitTime = this.config.messageRetryWaitMs || 5000;
+    const pollInterval = this.config.messageRetryPollIntervalMs || 500;
+    const maxAttempts = Math.ceil(maxWaitTime / pollInterval);
+    
+    // Verificar si está listo inmediatamente
+    if (this.isReady() && this.messageSender) {
+      logger.debug('[WHATSAPP_BOT] Bot listo, enviando mensaje inmediatamente.');
+      return await this.messageSender.sendMessage(data);
     }
     
-    return await this.messageSender.sendMessage(data);
+    // Si no está listo, esperar con polling
+    logger.warn(`[WHATSAPP_BOT] Bot no está listo. Esperando reconexión por hasta ${maxWaitTime}ms...`);
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Esperar el intervalo de polling
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      
+      // Verificar si ya está listo
+      if (this.isReady() && this.messageSender) {
+        logger.info(`[WHATSAPP_BOT] Bot reconectado después de ${attempt * pollInterval}ms. Enviando mensaje.`);
+        return await this.messageSender.sendMessage(data);
+      }
+      
+      logger.debug(`[WHATSAPP_BOT] Intento ${attempt}/${maxAttempts}: Bot aún no está listo...`);
+    }
+    
+    // Si llegamos aquí, se agotó el tiempo de espera
+    const errorMsg = `Bot no está conectado después de ${maxWaitTime}ms de espera`;
+    logger.error(`[WHATSAPP_BOT] ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   /**
    * Verifica si el bot está listo
    */
   isReady() {
-    return this.botStatus.isReady && this.connection.isReady();
+    // botStatus.isReady ya refleja el estado de la conexión y se actualiza en los callbacks
+    // Verificamos también que messageSender esté inicializado para asegurar que podemos enviar mensajes
+    return this.botStatus.isReady && this.messageSender !== null;
   }
 
   /**

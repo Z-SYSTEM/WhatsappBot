@@ -12,16 +12,7 @@ function setupSendRoutes(bot, authenticateToken) {
   // Endpoint para enviar mensajes
   router.post('/send', authenticateToken, async (req, res) => {
     try {
-      // Verificar estado del bot
-      if (!bot.isReady()) {
-        logger.warn('[SEND_ROUTE] WhatsApp client not ready or session closed');
-        return res.status(503).json({ 
-          res: false, 
-          error: 'WhatsApp client not connected or session closed' 
-        });
-      }
-
-      // Validar payload
+      // Validar payload (el bot.sendMessage manejará la espera de reconexión)
       const validation = Validators.validateSendMessagePayload(req.body);
       if (!validation.valid) {
         logger.warn('[SEND_ROUTE] Validation failed:', validation.errors);
@@ -140,6 +131,17 @@ function setupSendRoutes(bot, authenticateToken) {
 
     } catch (error) {
       logger.error(`[SEND_ROUTE] Error enviando mensaje: ${error.message}`);
+      
+      // Si el error es de timeout de conexión, devolver 503
+      if (error.message && error.message.includes('no está conectado')) {
+        return res.status(503).json({
+          res: false,
+          error: 'WhatsApp client not connected',
+          details: error.message
+        });
+      }
+      
+      // Otros errores devuelven 500
       res.status(500).json({
         res: false,
         error: 'Error interno del servidor',
