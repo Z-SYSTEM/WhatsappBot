@@ -1,4 +1,1 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # Hook pre-commit vacío - los tests se ejecutan manualmente cuando sea necesario
