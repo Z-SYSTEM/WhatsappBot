@@ -41,6 +41,7 @@ class WhatsAppBot {
       isManuallyStopped: false, // Para prevenir reinicios automáticos del health check
       lastHealthCheck: null,
       lastMessageTimestamp: null,
+      lastConnectionTime: null, // Timestamp de la última conexión exitosa
       restartAttempts: 0,
       maxRestartAttempts: 3
     };
@@ -146,6 +147,7 @@ class WhatsAppBot {
 
     this.botStatus.isReady = true;
     this.botStatus.isConnecting = false;
+    this.botStatus.lastConnectionTime = new Date();
     
     logger.info('[WHATSAPP_BOT] Handlers actualizados correctamente. Bot listo para enviar mensajes.');
   }
@@ -238,6 +240,15 @@ class WhatsAppBot {
       return;
     }
 
+    // Evitar ejecutar health check inmediatamente después de una reconexión (esperar al menos 10 segundos)
+    if (this.botStatus.lastConnectionTime) {
+      const secondsSinceConnection = (new Date() - this.botStatus.lastConnectionTime) / 1000;
+      if (secondsSinceConnection < 10) {
+        logger.debug(`[HEALTH_CHECK] Conexión reciente (${secondsSinceConnection.toFixed(1)}s), saltando chequeo para evitar race condition.`);
+        return;
+      }
+    }
+
     const sock = this.connection.getSocket();
     const isWsOpen = sock.ws?.isOpen ?? false;
     const isBotReady = this.isReady();
@@ -277,7 +288,6 @@ class WhatsAppBot {
           if (silenceDurationMinutes > this.config.healthCheckMaxSilenceMinutes) {
             logger.warn(`[HEALTH_CHECK] ¡ALERTA! No se han recibido mensajes en ${silenceDurationMinutes.toFixed(1)} minutos. Forzando reconexión por posible estado zombie.`);
             await this.reconnect();
-            silenceDurationMinutes = 0;
             return; // Salimos después de reconectar
           }
         }
