@@ -3,10 +3,27 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import session from 'express-session';
+import fs from 'fs';
 import { logger } from '../logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(path.dirname(__filename)); // up to src/
+const ROOT_DIR = path.dirname(__dirname); // up to project root
+
+// Leer versión de la aplicación
+function getAppVersion() {
+  const VERSION_FILE = path.join(ROOT_DIR, 'VERSION');
+  try {
+    if (fs.existsSync(VERSION_FILE)) {
+      return fs.readFileSync(VERSION_FILE, 'utf8').trim();
+    }
+  } catch (e) {
+    logger.warn('[WEB_UI] No se pudo leer VERSION, usando versión por defecto');
+  }
+  return '1.0.0';
+}
+
+const appVersion = getAppVersion();
 
 export function setupWebUI(app, server, config) {
   logger.info('[WEB_UI] Configurando interfaz web...');
@@ -43,7 +60,10 @@ export function setupWebUI(app, server, config) {
 
   // Routes
   app.get('/', checkAuth, (req, res) => {
-    res.render('index', { botName: config.botName });
+    res.render('index', { 
+      botName: config.botName,
+      appVersion: appVersion
+    });
   });
 
   app.get('/login', (req, res) => {
@@ -63,6 +83,28 @@ export function setupWebUI(app, server, config) {
   app.get('/logout', (req, res) => {
     req.session.destroy(() => {
       res.redirect('/login');
+    });
+  });
+
+  // Endpoint para obtener versión y changelog (vista HTML)
+  app.get('/api/version', checkAuth, (req, res) => {
+    const changelogPath = path.join(ROOT_DIR, 'CHANGELOG.md');
+    let changelog = '';
+    try {
+      if (fs.existsSync(changelogPath)) {
+        changelog = fs.readFileSync(changelogPath, 'utf8');
+      } else {
+        changelog = 'No hay changelog disponible';
+      }
+    } catch (e) {
+      logger.warn('[WEB_UI] No se pudo leer CHANGELOG.md');
+      changelog = 'No se pudo cargar el changelog';
+    }
+    
+    res.render('changelog', {
+      botName: config.botName,
+      appVersion: appVersion,
+      changelog: changelog
     });
   });
 

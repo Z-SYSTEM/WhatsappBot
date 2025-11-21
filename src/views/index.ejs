@@ -97,6 +97,27 @@
         .test-message-container {
             display: none;
         }
+
+        /* Estilos para versión */
+        .version-info {
+            text-align: right;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .version-info strong {
+            color: #333;
+        }
+        .version-link {
+            margin-left: 10px;
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .version-link:hover {
+            text-decoration: underline;
+        }
         
         /* Responsivo: apila las columnas en pantallas pequeñas */
         @media (max-width: 900px) {
@@ -111,7 +132,13 @@
 </head>
 <body>
     <div class="container">
-        <h1>Estado del Bot: <%= botName %></h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h1 style="margin: 0;">Estado del Bot: <%= botName %></h1>
+            <div class="version-info">
+                Versión: <strong><%= appVersion %></strong>
+                <a href="/api/version" target="_blank" class="version-link" id="version-link">Ver novedades</a>
+            </div>
+        </div>
         <div class="main-wrapper">
             <div class="content-column">
                 <div id="status-container">
