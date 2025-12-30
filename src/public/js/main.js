@@ -9,9 +9,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const qrContainer = document.getElementById('qr-container');
     const qrCanvas = document.getElementById('qr-canvas');
     const logBox = document.getElementById('log-box');
-    const testMessageForm = document.getElementById('test-message-form');
-    const testMessageContainer = document.querySelector('.test-message-container');
-    const testMessageStatus = document.getElementById('test-message-status');
+    const sendMessageForm = document.getElementById('send-message-form');
+    const sendMessageContainer = document.querySelector('.send-message-container');
+    const sendMessageStatus = document.getElementById('send-message-status');
+    const contactInfoForm = document.getElementById('contact-info-form');
+    const contactInfoContainer = document.querySelector('.contact-info-container');
+    const contactInfoStatus = document.getElementById('contact-info-status');
+    const contactResult = document.getElementById('contact-result');
+    const contactPhoto = document.getElementById('contact-photo');
+    const contactName = document.getElementById('contact-name');
+    const contactNumber = document.getElementById('contact-number');
     const btnLogoutWhatsapp = document.getElementById('btn-logout-whatsapp');
     const btnStartBot = document.getElementById('btn-start-bot');
     const btnStopBot = document.getElementById('btn-stop-bot');
@@ -66,13 +73,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.isReady) {
             statusIndicator.classList.add('connected');
             qrContainer.style.display = 'none';
-            if (testMessageContainer) testMessageContainer.style.display = 'block';
+            if (sendMessageContainer) sendMessageContainer.style.display = 'block';
+            if (contactInfoContainer) contactInfoContainer.style.display = 'block';
         } else if (data.isConnecting) {
             statusIndicator.classList.add('connecting');
-            if (testMessageContainer) testMessageContainer.style.display = 'none';
+            if (sendMessageContainer) sendMessageContainer.style.display = 'none';
+            if (contactInfoContainer) contactInfoContainer.style.display = 'none';
         } else {
             statusIndicator.classList.add('disconnected');
-            if (testMessageContainer) testMessageContainer.style.display = 'none';
+            if (sendMessageContainer) sendMessageContainer.style.display = 'none';
+            if (contactInfoContainer) contactInfoContainer.style.display = 'none';
         }
 
         // Actualizar visibilidad de botones
@@ -175,27 +185,72 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (testMessageForm) {
-        testMessageForm.addEventListener('submit', (e) => {
+    if (sendMessageForm) {
+        sendMessageForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const phone = document.getElementById('test-phone').value;
-            const message = document.getElementById('test-message').value;
+            const phone = document.getElementById('send-phone').value;
+            const message = document.getElementById('send-message').value;
             
-            testMessageStatus.textContent = 'Enviando...';
-            testMessageStatus.className = 'status-info';
+            sendMessageStatus.textContent = 'Enviando...';
+            sendMessageStatus.className = 'status-info';
 
             socket.emit('send_test_message', { phone, message });
         });
     }
 
     socket.on('test_message_result', (data) => {
-        if (!testMessageStatus) return;
+        if (!sendMessageStatus) return;
         if (data.success) {
-            testMessageStatus.textContent = `Mensaje enviado a ${data.phone}. ID: ${data.messageId}`;
-            testMessageStatus.className = 'status-success';
+            sendMessageStatus.textContent = `Mensaje enviado a ${data.phone}. ID: ${data.messageId}`;
+            sendMessageStatus.className = 'status-success';
+            // Limpiar formulario después de éxito
+            sendMessageForm.reset();
         } else {
-            testMessageStatus.textContent = `Error enviando a ${data.phone}: ${data.error}`;
-            testMessageStatus.className = 'status-error';
+            sendMessageStatus.textContent = `Error enviando a ${data.phone}: ${data.error}`;
+            sendMessageStatus.className = 'status-error';
+        }
+    });
+
+    if (contactInfoForm) {
+        contactInfoForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('contact-phone').value;
+            
+            contactInfoStatus.textContent = 'Obteniendo información...';
+            contactInfoStatus.className = 'status-info';
+            contactResult.classList.remove('show');
+
+            socket.emit('get_contact_info', { phone });
+        });
+    }
+
+    socket.on('contact_info_result', (data) => {
+        if (!contactInfoStatus) return;
+        
+        if (data.success && data.contact) {
+            contactInfoStatus.textContent = 'Información obtenida correctamente';
+            contactInfoStatus.className = 'status-success';
+            
+            // Mostrar información del contacto
+            const contact = data.contact;
+            contactName.textContent = contact.name || 'Sin nombre';
+            contactNumber.textContent = contact.number || contact.id || 'N/A';
+            
+            // Mostrar foto si está disponible
+            if (contact.profilePicUrl) {
+                contactPhoto.src = contact.profilePicUrl;
+                contactPhoto.style.display = 'block';
+            } else {
+                contactPhoto.style.display = 'none';
+            }
+            
+            contactResult.classList.add('show');
+            // Limpiar formulario después de éxito
+            contactInfoForm.reset();
+        } else {
+            contactInfoStatus.textContent = `Error: ${data.error || 'No se pudo obtener la información del contacto'}`;
+            contactInfoStatus.className = 'status-error';
+            contactResult.classList.remove('show');
         }
     });
 

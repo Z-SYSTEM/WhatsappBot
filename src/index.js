@@ -172,6 +172,25 @@ async function startServer() {
       }
     });
 
+    socket.on('get_contact_info', async (data) => {
+      if (!data.phone) {
+          return socket.emit('contact_info_result', { success: false, error: 'Número de teléfono es requerido.', phone: data.phone });
+      }
+      if (bot && bot.isReady()) {
+          try {
+              logger.info(`[WEB_UI] Obteniendo información de contacto para ${data.phone}`);
+              const contactInfo = await bot.getContactInfo(data.phone);
+              socket.emit('contact_info_result', { success: true, contact: contactInfo, phone: data.phone });
+          } catch (error) {
+              logger.error(`[WEB_UI] Error obteniendo información de contacto: ${error.message}`);
+              socket.emit('contact_info_result', { success: false, error: error.message, phone: data.phone });
+          }
+      } else {
+          logger.warn(`[WEB_UI] Intento de obtener información de contacto pero el bot no está listo.`);
+          socket.emit('contact_info_result', { success: false, error: 'Bot no está listo.', phone: data.phone });
+      }
+    });
+
     socket.on('logout_whatsapp', async () => {
       logger.info('[WEB_UI] Solicitud de cierre de sesión de WhatsApp recibida.');
       if (bot) {

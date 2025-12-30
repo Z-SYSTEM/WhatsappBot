@@ -83,24 +83,18 @@ h1 {
     background: white;
 }
 
-.test-message-container, .log-container {
+.log-container {
     margin-top: 20px;
     padding-top: 15px;
     border-top: 1px solid #eee;
     text-align: left;
 }
 
-.test-message-container h2, .log-container h2 {
+.log-container h2 {
     text-align: center;
     margin-top: 0;
     margin-bottom: 20px;
     color: #1c1e21;
-}
-
-.test-message-container form {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
 }
 
 .btn-send-test {
@@ -119,7 +113,8 @@ h1 {
     background-color: #36a420;
 }
 
-#test-message-status {
+#send-message-status,
+#contact-info-status {
     margin-top: 15px;
     padding: 10px;
     border-radius: 4px;
@@ -127,22 +122,68 @@ h1 {
     display: none; /* Hidden by default */
 }
 
-#test-message-status.status-info {
+#send-message-status.status-info,
+#contact-info-status.status-info {
     display: block;
     background-color: #e7f3ff;
     color: #1877f2;
 }
 
-#test-message-status.status-success {
+#send-message-status.status-success,
+#contact-info-status.status-success {
     display: block;
     background-color: #e9f6ec;
     color: #42b72a;
 }
 
-#test-message-status.status-error {
+#send-message-status.status-error,
+#contact-info-status.status-error {
     display: block;
     background-color: #fbe3e3;
     color: #c00;
+}
+
+.contact-result {
+    margin-top: 15px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #f7f7f7;
+    display: none;
+}
+
+.contact-result.show {
+    display: block;
+}
+
+.contact-result-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.contact-photo {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #ddd;
+    background-color: #e0e0e0;
+}
+
+.contact-details {
+    flex: 1;
+}
+
+.contact-details h3 {
+    margin: 0 0 5px 0;
+    color: #1c1e21;
+}
+
+.contact-number {
+    color: #606770;
+    font-size: 0.9em;
 }
 
 #log-box {

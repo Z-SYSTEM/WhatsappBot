@@ -373,9 +373,23 @@ class WhatsAppBot {
     }
     
     const sock = this.connection.getSocket();
-    const wid = phoneNumber.endsWith('@c.us') ? phoneNumber : `${phoneNumber}@c.us`;
     
-    logger.info(`[WHATSAPP_BOT] Buscando info de contacto: ${wid}`);
+    // Detectar si es un LID (Linked ID) o un número de teléfono
+    let wid;
+    const isLid = phoneNumber.endsWith('@lid');
+    
+    if (isLid) {
+      // Si es LID, usar directamente sin modificar
+      wid = phoneNumber;
+    } else if (phoneNumber.endsWith('@c.us')) {
+      // Si ya tiene @c.us, usar directamente
+      wid = phoneNumber;
+    } else {
+      // Si es número de teléfono, agregar @c.us
+      wid = `${phoneNumber}@c.us`;
+    }
+    
+    logger.info(`[WHATSAPP_BOT] Buscando info de contacto: ${wid} (${isLid ? 'LID' : 'phone'})`);
     
     try {
       // Obtener información del contacto
@@ -411,18 +425,30 @@ class WhatsAppBot {
       } else if (contactData?.verifiedName && contactData.verifiedName.trim() !== '') {
         contactName = contactData.verifiedName;
       } else {
-        contactName = wid.replace('@c.us', '');
+        // Para LIDs, usar el ID completo; para números, solo el número
+        contactName = isLid ? wid : wid.replace('@c.us', '');
+      }
+      
+      // Extraer número de teléfono si está disponible
+      // Para LIDs, el número puede no estar disponible por privacidad
+      let phoneNumberValue = null;
+      if (isLid) {
+        // Intentar obtener el número del contacto si está disponible
+        phoneNumberValue = contactData?.phoneNumber || contactData?.id?.replace('@c.us', '') || null;
+      } else {
+        phoneNumberValue = wid.replace('@c.us', '');
       }
       
       return {
         id: wid,
         name: contactName,
-        number: wid.replace('@c.us', ''),
+        number: phoneNumberValue,
         isBusiness: contactData?.verifiedName ? true : false,
         profilePicUrl,
         status: contactData?.status || '',
         verified: contactData?.verifiedName ? true : false,
-        verifiedName: contactData?.verifiedName || null
+        verifiedName: contactData?.verifiedName || null,
+        isLid: isLid
       };
       
     } catch (error) {

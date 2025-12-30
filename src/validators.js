@@ -289,8 +289,35 @@ class Validators {
     const errors = [];
     const sanitizedPayload = this.sanitizeInput(payload);
 
-    // Validar phoneNumber
-    const phoneValidation = this.validatePhoneNumber(sanitizedPayload.phoneNumber);
+    if (!sanitizedPayload.phoneNumber || typeof sanitizedPayload.phoneNumber !== 'string') {
+      return { valid: false, errors: ['phoneNumber must be a non-empty string'] };
+    }
+
+    const input = sanitizedPayload.phoneNumber.trim();
+
+    // Verificar si es un LID (Linked ID)
+    if (input.endsWith('@lid')) {
+      // Validar formato LID: debe ser solo dígitos antes de @lid
+      const lidPattern = /^\d+@lid$/;
+      if (!lidPattern.test(input)) {
+        errors.push('Invalid LID format. Must be digits followed by @lid (e.g., 30949668610142@lid)');
+      }
+
+      if (errors.length > 0) {
+        return { valid: false, errors };
+      }
+
+      return {
+        valid: true,
+        payload: {
+          ...sanitizedPayload,
+          phoneNumber: input
+        }
+      };
+    }
+
+    // Si no es LID, validar como número de teléfono
+    const phoneValidation = this.validatePhoneNumber(input);
     if (!phoneValidation.valid) {
       errors.push(phoneValidation.error);
     }
