@@ -374,6 +374,11 @@ class WhatsAppBot {
     
     const sock = this.connection.getSocket();
     
+    // Verificar que el socket existe
+    if (!sock) {
+      throw new Error('Socket no disponible. El bot puede estar reconectando.');
+    }
+    
     // Detectar si es un LID (Linked ID) o un número de teléfono
     let wid;
     const isLid = phoneNumber.endsWith('@lid');
@@ -466,6 +471,11 @@ class WhatsAppBot {
     }
     
     const sock = this.connection.getSocket();
+    
+    // Verificar que el socket existe
+    if (!sock) {
+      throw new Error('Socket no disponible. El bot puede estar reconectando.');
+    }
     
     logger.info(`[WHATSAPP_BOT] Buscando info de grupo: ${groupId}`);
     
