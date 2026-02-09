@@ -127,7 +127,7 @@ async function startServer() {
   // Configurar eventos de Socket.IO
   io.on('connection', (socket) => {
     // Proteger conexión de socket
-    if (!socket.request.session.isAuthenticated) {
+    if (!socket.request.session?.isAuthenticated) {
       socket.disconnect(true);
       return;
     }

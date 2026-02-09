@@ -102,7 +102,8 @@ class AlbumHandler {
       logger.info(`[ALBUM_HANDLER] Máximo de imágenes alcanzado, procesando álbum: ${albumId}`);
       // Cancelar timeout si existe
       if (this.albumTracker.has(albumId)) {
-        clearTimeout(this.albumTracker.get(albumId));
+        const entry = this.albumTracker.get(albumId);
+        clearTimeout(typeof entry === 'object' ? entry.timeoutId : entry);
         this.albumTracker.delete(albumId);
       }
       this.processAlbum(albumId);
@@ -113,7 +114,7 @@ class AlbumHandler {
           logger.info(`[ALBUM_HANDLER] Timeout alcanzado, procesando álbum: ${albumId}`);
           this.processAlbum(albumId);
         }, _ALBUM_WAIT_TIMEOUT);
-        this.albumTracker.set(albumId, timeoutId);
+        this.albumTracker.set(albumId, { timeoutId, createdAt: Date.now() });
       }
     }
   }
@@ -232,11 +233,15 @@ class AlbumHandler {
   cleanupExpiredAlbums() {
     try {
       const now = Date.now();
+      const ALBUM_EXPIRE_MS = 30000; // 30 segundos
       let cleanedCount = 0;
       
-      for (const [albumId, timeout] of this.albumTracker.entries()) {
-        // Si han pasado más de 30 segundos, limpiar el álbum
-        if (now - timeout > 30000) {
+      for (const [albumId, entry] of this.albumTracker.entries()) {
+        const createdAt = typeof entry === 'object' && entry.createdAt ? entry.createdAt : 0;
+        // Si han pasado más de 30 segundos desde la creación, limpiar el álbum
+        if (now - createdAt > ALBUM_EXPIRE_MS) {
+          const timeoutId = typeof entry === 'object' ? entry.timeoutId : entry;
+          if (timeoutId) clearTimeout(timeoutId);
           logger.debug(`[ALBUM_HANDLER] Limpiando álbum expirado: ${albumId}`);
           this.albumTracker.delete(albumId);
           this.albumMessages.delete(albumId);

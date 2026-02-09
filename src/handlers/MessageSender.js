@@ -68,8 +68,8 @@ class MessageSender {
    * Normaliza el JID (ID de WhatsApp)
    */
   normalizeJid(phone) {
-    // Detectar si es un grupo (@g.us) o contacto individual (@c.us)
-    if (phone.includes('@g.us') || phone.includes('@c.us')) {
+    // Detectar si es un grupo (@g.us), contacto individual (@c.us) o LID (@lid)
+    if (phone.includes('@g.us') || phone.includes('@c.us') || phone.includes('@lid')) {
       return phone;
     }
     

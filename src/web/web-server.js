@@ -39,7 +39,6 @@ export function setupWebUI(app, server, config) {
   });
 
   app.use(sessionMiddleware);
-  app.use(express.urlencoded({ extended: true }));
 
   // Share session with Socket.IO
   io.use((socket, next) => {

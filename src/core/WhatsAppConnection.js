@@ -1,6 +1,6 @@
 import makeWASocket, { DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
-import { logger, logRecovery } from '../logger.js';
+import { logger } from '../logger.js';
 import fs from 'fs-extra';
 import path from 'path';
 // import { generateQRCode } from '../qr-handler.js';
@@ -187,7 +187,9 @@ class WhatsAppConnection {
 
     // Manejar llamadas
     this.sock.ev.on('call', async (json) => {
-      await this.callHandler.handleCall(json);
+      if (this.callHandler) {
+        await this.callHandler.handleCall(json);
+      }
     });
   }
 
@@ -324,7 +326,7 @@ class WhatsAppConnection {
       logger.error('[WA_CONNECTION] Conexión cerrada por logout del usuario. Limpiando sesión para generar nuevo QR.');
       
       // Limpiar la sesión (sin restaurar) para forzar un nuevo QR
-      await this.sessionManager.cleanupSession({ restoreAfter: false });
+      await this.sessionManager.cleanupSession();
       
       // Resetear el estado de reintentos
       this.resetRetryState();

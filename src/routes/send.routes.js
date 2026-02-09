@@ -25,9 +25,9 @@ function setupSendRoutes(bot, authenticateToken) {
 
       const { phoneNumber, message, imageUrl, imageUrls, pdfUrl, contact, vcard } = validation.payload;
 
-      // Preparar chatId
+      // Preparar chatId (soporta @g.us, @c.us y @lid)
       let chatId;
-      if (phoneNumber.includes('@g.us')) {
+      if (phoneNumber.includes('@g.us') || phoneNumber.includes('@c.us') || phoneNumber.includes('@lid')) {
         chatId = phoneNumber;
       } else {
         let cleanPhone = phoneNumber;
