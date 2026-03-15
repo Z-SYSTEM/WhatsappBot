@@ -27,9 +27,19 @@ function formatTimestamp() {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+// Colores para niveles personalizados (evita "colors[Colorizer.allColors[lookup]] is not a function")
+winston.addColors({
+  error: 'red',
+  warn: 'yellow',
+  info: 'green',
+  message: 'cyan',
+  debug: 'blue'
+});
+
 // Logger unificado optimizado con rotación diaria
 const logger = winston.createLogger({
   level: 'info',
+  levels: { error: 0, warn: 1, info: 2, message: 2, debug: 5 },
   format: winston.format.combine(
     winston.format.timestamp({ format: formatTimestamp }),
     winston.format.errors({ stack: true })
@@ -84,8 +94,8 @@ const tempLogData = {};
 // Funciones de logging optimizadas que reutilizan objetos
 const logMessage = {
   received: (messageData) => {
-    // Crear mensaje descriptivo con remitente y contenido
-    let logMessage = `📥 ${messageData.phoneNumber}`;
+    // Crear mensaje descriptivo con remitente y contenido (→ = recibido)
+    let logMessage = `▶ ${messageData.phoneNumber}`;
     
     if (messageData.body && messageData.body.trim()) {
       logMessage += `: "${messageData.body}"`;
@@ -93,17 +103,17 @@ const logMessage = {
       logMessage += ` (${messageData.type})`;
     }
     
-    logger.info(logMessage);
+    logger.log('message', logMessage, { direction: 'in' });
   },
   
   sent: (messageData) => {
-    let logMsg = `📤 ${messageData.phoneNumber}`;
+    let logMsg = `◀ ${messageData.phoneNumber}`;
     if (messageData.body && messageData.body.trim()) {
       logMsg += `: "${messageData.body}"`;
     } else {
       logMsg += ` (${messageData.type})`;
     }
-    logger.info(logMsg);
+    logger.log('message', logMsg, { direction: 'out' });
   },
   
   failed: (messageData, error) => {

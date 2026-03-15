@@ -394,6 +394,22 @@
     color: var(--text);
 }
 
+.btn-scroll-bottom {
+    padding: 0.3rem 0.6rem;
+    background: var(--bg-input);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-scroll-bottom:hover {
+    background: var(--border);
+    color: var(--text);
+}
+
 .console-title {
     margin: 0;
     font-size: 0.95rem;
@@ -458,6 +474,30 @@
 .log-level.log-warn { color: var(--accent-orange); }
 .log-level.log-error { color: var(--accent-red); }
 .log-level.log-debug { color: var(--text-muted); }
+.log-level.log-message { color: var(--accent-green); }
+
+/* Mensajes entrantes vs salientes */
+.log-entry.log-message-in {
+    border-left: 3px solid #3b82f6;
+    padding-left: 0.5rem;
+    background: rgba(59, 130, 246, 0.08);
+}
+.log-entry.log-message-out {
+    border-left: 3px solid #22c55e;
+    padding-left: 0.5rem;
+    background: rgba(34, 197, 94, 0.08);
+}
+.log-arrow {
+    font-size: 1.35em;
+    font-weight: 700;
+    margin-right: 0.4rem;
+}
+.log-arrow-in {
+    color: #3b82f6;
+}
+.log-arrow-out {
+    color: #22c55e;
+}
 
 /* ===== Responsive ===== */
 @media (max-width: 900px) {

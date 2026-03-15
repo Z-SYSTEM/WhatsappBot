@@ -3,7 +3,8 @@
 ## [1.0.6] - 2026-03-15
 
 ### Agregado
-- **Nueva UI**: Interfaz rediseñada con tema oscuro tipo Control Center. Panel lateral con estado del bot, controles y formularios; consola de logs con estilo terminal. Filtros por nivel de log (info, warn, error, debug) persistentes en localStorage. Carga de logs de las últimas 24 horas al refrescar.
+- **Nueva UI**: Interfaz rediseñada con tema oscuro tipo Control Center. Panel lateral con estado del bot, controles y formularios; consola de logs con estilo terminal. Filtros por nivel de log (info, warn, error, debug, message) persistentes en localStorage. Carga de logs de las últimas 24 horas al refrescar.
+- **Nivel de log `message`**: Los mensajes enviados y recibidos por WhatsApp se registran en la categoría `message` para poder filtrarlos y consultarlos por separado en la consola.
 
 ## [1.0.5] - 2026-03-15
 

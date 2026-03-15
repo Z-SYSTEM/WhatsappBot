@@ -16,11 +16,11 @@
         <form action="/login" method="POST">
             <div class="form-group">
                 <label for="username">Usuario</label>
-                <input type="text" id="username" name="username" required>
+                <input type="text" id="username" name="username" required autofocus onfocus="this.select()">
             </div>
             <div class="form-group">
                 <label for="password">Contraseña</label>
-                <input type="password" id="password" name="password" required>
+                <input type="password" id="password" name="password" required onfocus="this.select()">
             </div>
             <button type="submit" class="btn-login">Entrar</button>
         </form>

@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const maxLogEntries = 10000;
-    const LOG_LEVELS = ['info', 'warn', 'error', 'debug'];
+    const LOG_LEVELS = ['info', 'warn', 'error', 'debug', 'message'];
     const FILTER_STORAGE_KEY = 'logLevelFilters';
 
     function getLogFilters() {
@@ -40,10 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const raw = localStorage.getItem(FILTER_STORAGE_KEY);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                return { info: true, warn: true, error: true, debug: true, ...parsed };
+                return { info: true, warn: true, error: true, debug: true, message: true, ...parsed };
             }
         } catch (_) {}
-        return { info: true, warn: true, error: true, debug: true };
+        return { info: true, warn: true, error: true, debug: true, message: true };
     }
 
     function saveLogFilters(filters) {
@@ -68,8 +68,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!logBox) return;
         const level = (log.level || 'info').toLowerCase();
         const filters = getLogFilters();
+        let direction = log.direction;
+        if (!direction && level === 'message' && log.message) {
+            if (log.message.startsWith('▶')) direction = 'in';
+            else if (log.message.startsWith('◀')) direction = 'out';
+        }
         const logEntry = document.createElement('div');
-        logEntry.className = `log-entry log-${level}`;
+        logEntry.className = `log-entry log-${level}` + (direction ? ` log-message-${direction}` : '');
         logEntry.dataset.level = level;
         logEntry.style.display = filters[level] !== false ? '' : 'none';
 
@@ -84,15 +89,31 @@ document.addEventListener('DOMContentLoaded', () => {
         levelSpan.className = `log-level log-${level}`;
         levelSpan.textContent = levelFormatted;
 
-        const messageSpan = document.createElement('span');
-        messageSpan.className = 'log-message';
-        messageSpan.textContent = log.message;
-
-        logEntry.appendChild(timestampSpan);
-        logEntry.appendChild(document.createTextNode(' '));
-        logEntry.appendChild(levelSpan);
-        logEntry.appendChild(document.createTextNode(' '));
-        logEntry.appendChild(messageSpan);
+        let messageText = log.message || '';
+        if (direction) {
+            const arrowSpan = document.createElement('span');
+            arrowSpan.className = `log-arrow log-arrow-${direction}`;
+            arrowSpan.textContent = direction === 'in' ? '▶' : '◀';
+            logEntry.appendChild(timestampSpan);
+            logEntry.appendChild(document.createTextNode(' '));
+            logEntry.appendChild(levelSpan);
+            logEntry.appendChild(document.createTextNode(' '));
+            logEntry.appendChild(arrowSpan);
+            const messageSpan = document.createElement('span');
+            messageSpan.className = 'log-message';
+            messageSpan.textContent = (messageText.startsWith('▶ ') || messageText.startsWith('◀ ')) ? messageText.slice(2) : messageText;
+            logEntry.appendChild(document.createTextNode(' '));
+            logEntry.appendChild(messageSpan);
+        } else {
+            const messageSpan = document.createElement('span');
+            messageSpan.className = 'log-message';
+            messageSpan.textContent = messageText;
+            logEntry.appendChild(timestampSpan);
+            logEntry.appendChild(document.createTextNode(' '));
+            logEntry.appendChild(levelSpan);
+            logEntry.appendChild(document.createTextNode(' '));
+            logEntry.appendChild(messageSpan);
+        }
 
         logBox.appendChild(logEntry);
 
@@ -240,6 +261,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (logBox) {
                 logBox.innerHTML = '';
             }
+        });
+    }
+
+    const btnScrollBottom = document.getElementById('btn-scroll-bottom');
+    if (btnScrollBottom && logBox) {
+        btnScrollBottom.addEventListener('click', () => {
+            logBox.scrollTop = logBox.scrollHeight;
         });
     }
 

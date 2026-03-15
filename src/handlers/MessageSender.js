@@ -19,6 +19,20 @@ class MessageSender {
    * Wrapper for sock.sendMessage with timeout and retry for 'No session record'
    */
   async _sendMessageWithRetry(jid, content, timeout = 8000) {
+    const contentForLog = {};
+    for (const [k, v] of Object.entries(content || {})) {
+      if (Buffer.isBuffer(v)) {
+        contentForLog[k] = `[Buffer ${v.length} bytes]`;
+      } else if (k === 'location' && v && typeof v === 'object') {
+        contentForLog[k] = v;
+      } else if (k === 'contacts' && v && typeof v === 'object') {
+        contentForLog[k] = v;
+      } else {
+        contentForLog[k] = v;
+      }
+    }
+    logger.debug(`[MESSAGE_SENDER] Baileys.sendMessage -> jid=${jid} | ${JSON.stringify(contentForLog)}`);
+
     const doSend = () => this.sock.sendMessage(jid, content);
     
     try {
@@ -258,6 +272,12 @@ class MessageSender {
    */
   async sendMessage({ phone, message, type = 'text', media }) {
     try {
+      const payload = { phone, message, type, media };
+      if (payload.media?.data) {
+        payload.media = { ...payload.media, data: `[base64, ${payload.media.data.length} chars]` };
+      }
+      logger.debug(`[MESSAGE_SENDER] JSON recibido para enviar: ${JSON.stringify(payload)}`);
+
       const jid = this.normalizeJid(phone);
       let sentMessage;
 

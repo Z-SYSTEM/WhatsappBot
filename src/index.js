@@ -92,7 +92,7 @@ async function startServer() {
                       return callback();
                   }
 
-                  const { level, message, timestamp } = info;
+                  const { level, message, timestamp, direction } = info;
                   let messageContent = '';
 
                   if (message) {
@@ -106,11 +106,9 @@ async function startServer() {
                   }
 
                   if (messageContent) {
-                      this.io.emit('log_entry', {
-                          timestamp: timestamp || new Date().toISOString(),
-                          level: level || 'info',
-                          message: messageContent,
-                      });
+                      const entry = { timestamp: timestamp || new Date().toISOString(), level: level || 'info', message: messageContent };
+                      if (direction) entry.direction = direction;
+                      this.io.emit('log_entry', entry);
                   }
               } catch (e) {
                   console.error('Error en SocketIoTransport:', e.message);
@@ -177,7 +175,11 @@ async function startServer() {
             const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)
               ? ts.replace(' ', 'T')
               : new Date(tsMs).toISOString();
-            allEntries.push({ level: parsed.level || 'info', message: msg, timestamp: iso });
+            const entry = { level: parsed.level || 'info', message: msg, timestamp: iso };
+            if (parsed.direction) entry.direction = parsed.direction;
+            else if (msg.startsWith('▶')) entry.direction = 'in';
+            else if (msg.startsWith('◀')) entry.direction = 'out';
+            allEntries.push(entry);
           } catch {
             /* skip invalid line */
           }

@@ -123,12 +123,9 @@ class WhatsAppConnection {
       
       const { state, saveCreds } = await useMultiFileAuthState(this.config.dirs.sessions);
       
-      logger.info(`[WA_CONNECTION] Buscando la versión más reciente de Baileys...`);
-      
       try {
         const latest = await fetchLatestBaileysVersion();
         version = latest.version;
-        logger.info(`[WA_CONNECTION] Usando Baileys v${version.join('.')}`);
       } catch (e) {
         logger.warn('[WA_CONNECTION] No se pudo obtener la última versión de Baileys, se usará la versión por defecto.', e.message);
         version = undefined;
