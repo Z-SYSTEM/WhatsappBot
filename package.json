@@ -29,7 +29,7 @@
   "license": "MIT",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "6.7.21",
+    "@whiskeysockets/baileys": "6.17.16",
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
     "ejs": "^3.1.10",

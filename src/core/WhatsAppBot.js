@@ -236,7 +236,6 @@ class WhatsAppBot {
     this.botStatus.lastHealthCheck = new Date();
 
     if (!this.connection || !this.connection.getSocket()) {
-      logger.debug('[HEALTH_CHECK] El bot no está inicializado, saltando chequeo.');
       return;
     }
 
@@ -244,7 +243,6 @@ class WhatsAppBot {
     if (this.botStatus.lastConnectionTime) {
       const secondsSinceConnection = (new Date() - this.botStatus.lastConnectionTime) / 1000;
       if (secondsSinceConnection < 10) {
-        logger.debug(`[HEALTH_CHECK] Conexión reciente (${secondsSinceConnection.toFixed(1)}s), saltando chequeo para evitar race condition.`);
         return;
       }
     }
@@ -252,8 +250,6 @@ class WhatsAppBot {
     const sock = this.connection.getSocket();
     const isWsOpen = sock.ws?.isOpen ?? false;
     const isBotReady = this.isReady();
-
-    logger.debug(`[HEALTH_CHECK] Estado: isReady=${isBotReady}, isWsOpen=${isWsOpen}, isConnecting=${this.botStatus.isConnecting}`);
 
     // Caso 1: El bot se cree conectado, pero el websocket está cerrado. Es un estado "trabado".
     if (isBotReady && !isWsOpen) {
@@ -265,10 +261,9 @@ class WhatsAppBot {
     // Caso 2: El bot no está listo y no se está reconectando. Puede que la reconexión automática fallara.
     if (!isBotReady && !this.botStatus.isConnecting && !this.connection.isReconnecting) {
         if (this.botStatus.isManuallyStopped) {
-          logger.debug('[HEALTH_CHECK] El bot está detenido manualmente, el health check no lo reiniciará.');
           return;
         }
-        logger.warn('[HEALTH_CHECK] El bot no está conectado y no parece estar reconectando. Iniciando conexión...');
+        logger.error('[HEALTH_CHECK] El bot no está conectado y no parece estar reconectando. Iniciando conexión...');
         await this.connect().catch(e => logger.error('[HEALTH_CHECK] Error al intentar conectar desde health check:', e.message));
         return;
     }
@@ -286,18 +281,16 @@ class WhatsAppBot {
         if (this.config.healthCheckMaxSilenceMinutes > 0 && this.botStatus.lastMessageTimestamp) {
           const silenceDurationMinutes = (new Date() - this.botStatus.lastMessageTimestamp) / (1000 * 60);
           if (silenceDurationMinutes > this.config.healthCheckMaxSilenceMinutes) {
-            logger.warn(`[HEALTH_CHECK] ¡ALERTA! No se han recibido mensajes en ${silenceDurationMinutes.toFixed(1)} minutos. Forzando reconexión por posible estado zombie.`);
+            logger.error(`[HEALTH_CHECK] No se han recibido mensajes en ${silenceDurationMinutes.toFixed(1)} minutos. Forzando reconexión por posible estado zombie.`);
             await this.reconnect();
             return; // Salimos después de reconectar
           }
         }
 
       } catch (e) {
-        logger.error(`[HEALTH_CHECK] ¡FALLO! Chequeo de presencia falló: ${e.message}. Forzando reconexión...`);
+        logger.error(`[HEALTH_CHECK] Chequeo de presencia falló: ${e.message}. Forzando reconexión...`);
         await this.reconnect();
       }
-    } else {
-      logger.info('[HEALTH_CHECK] El bot no está listo, pero está en proceso de conexión.');
     }
   }
 

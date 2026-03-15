@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import fs from 'fs-extra';
+import path from 'path';
 import cron from 'node-cron';
 // import net from 'net'; // No longer needed
 import { logger } from './logger.js';
@@ -61,7 +62,6 @@ cron.schedule('0 2 * * *', async () => {
 // Configurar cron job para health check
 if (config.healthCheckInterval > 0) {
   cron.schedule(`*/${config.healthCheckInterval} * * * * *`, () => {
-    logger.debug('[CRON] Ejecutando health check...');
     if (bot) {
       bot.healthCheck();
     }
@@ -124,13 +124,85 @@ async function startServer() {
   // Add the custom transport to the logger
   logger.add(new SocketIoTransport({ io, level: 'info' }));
 
+  /**
+   * Lee las últimas 24 horas de logs para enviar al cliente
+   */
+  async function getLogsLast24Hours() {
+    try {
+      const logsDir = config.dirs.logs;
+      if (!(await fs.pathExists(logsDir))) return [];
+
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const parseTimestamp = (ts) => {
+        const m = (ts || '').match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+        return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : 0;
+      };
+
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      const candidates = [
+        path.join(logsDir, `whatsapp-bot-${today}.log`),
+        path.join(logsDir, `whatsapp-bot-${yesterday}.log`),
+      ];
+      const filesToRead = [];
+      for (const p of candidates) {
+        if (await fs.pathExists(p)) filesToRead.push(p);
+      }
+      if (filesToRead.length === 0) {
+        const files = await fs.readdir(logsDir);
+        const logFiles = files
+          .filter((f) => f.startsWith('whatsapp-bot-') && f.endsWith('.log'))
+          .sort()
+          .reverse()
+          .slice(0, 2);
+        for (const f of logFiles) {
+          filesToRead.push(path.join(logsDir, f));
+        }
+      }
+      if (filesToRead.length === 0) return [];
+
+      let allEntries = [];
+      for (const filePath of filesToRead) {
+        if (!(await fs.pathExists(filePath))) continue;
+        const content = await fs.readFile(filePath, 'utf8');
+        const lines = content.trim().split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            if (!parsed.message) continue;
+            const ts = parsed.timestamp || '';
+            const tsMs = parseTimestamp(ts);
+            if (tsMs < cutoff) continue;
+            const msg = typeof parsed.message === 'string' ? parsed.message : 'Log de objeto';
+            const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)
+              ? ts.replace(' ', 'T')
+              : new Date(tsMs).toISOString();
+            allEntries.push({ level: parsed.level || 'info', message: msg, timestamp: iso });
+          } catch {
+            /* skip invalid line */
+          }
+        }
+      }
+      allEntries.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      return allEntries;
+    } catch (e) {
+      logger.debug('[WEB_UI] No se pudo cargar historial de logs:', e.message);
+      return [];
+    }
+  }
+
   // Configurar eventos de Socket.IO
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     // Proteger conexión de socket
     if (!socket.request.session?.isAuthenticated) {
       socket.disconnect(true);
       return;
     }
+
+    socket.on('request_log_history', async () => {
+      const lastLogs = await getLogsLast24Hours();
+      socket.emit('log_history', lastLogs);
+    });
 
     if (bot) {
       const status = bot.getStatus();

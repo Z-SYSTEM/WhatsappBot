@@ -31,6 +31,80 @@ document.addEventListener('DOMContentLoaded', () => {
         hasQR: false
     };
 
+    const maxLogEntries = 10000;
+    const LOG_LEVELS = ['info', 'warn', 'error', 'debug'];
+    const FILTER_STORAGE_KEY = 'logLevelFilters';
+
+    function getLogFilters() {
+        try {
+            const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                return { info: true, warn: true, error: true, debug: true, ...parsed };
+            }
+        } catch (_) {}
+        return { info: true, warn: true, error: true, debug: true };
+    }
+
+    function saveLogFilters(filters) {
+        try {
+            localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+        } catch (_) {}
+    }
+
+    function applyLogFiltersToDOM() {
+        const filters = getLogFilters();
+        if (!logBox) return;
+        logBox.querySelectorAll('.log-entry').forEach((el) => {
+            const level = el.dataset.level || 'info';
+            el.style.display = filters[level] !== false ? '' : 'none';
+        });
+    }
+
+    /**
+     * Añade una entrada de log al logBox (usado por log_entry y log_history)
+     */
+    function appendLogEntry(log, scrollToBottom = true) {
+        if (!logBox) return;
+        const level = (log.level || 'info').toLowerCase();
+        const filters = getLogFilters();
+        const logEntry = document.createElement('div');
+        logEntry.className = `log-entry log-${level}`;
+        logEntry.dataset.level = level;
+        logEntry.style.display = filters[level] !== false ? '' : 'none';
+
+        const timestamp = new Date(log.timestamp).toLocaleTimeString();
+        const levelFormatted = `[${level.toUpperCase()}]`.padEnd(7, ' ');
+
+        const timestampSpan = document.createElement('span');
+        timestampSpan.className = 'log-timestamp';
+        timestampSpan.textContent = timestamp;
+
+        const levelSpan = document.createElement('span');
+        levelSpan.className = `log-level log-${level}`;
+        levelSpan.textContent = levelFormatted;
+
+        const messageSpan = document.createElement('span');
+        messageSpan.className = 'log-message';
+        messageSpan.textContent = log.message;
+
+        logEntry.appendChild(timestampSpan);
+        logEntry.appendChild(document.createTextNode(' '));
+        logEntry.appendChild(levelSpan);
+        logEntry.appendChild(document.createTextNode(' '));
+        logEntry.appendChild(messageSpan);
+
+        logBox.appendChild(logEntry);
+
+        while (logBox.children.length > maxLogEntries) {
+            logBox.removeChild(logBox.firstChild);
+        }
+
+        if (scrollToBottom) {
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+    }
+
     /**
      * Actualiza la visibilidad de los botones según el estado del bot
      */
@@ -57,14 +131,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('connect', () => {
         console.log('Conectado al servidor de UI');
-        // Inicializar visibilidad de botones
         updateButtonVisibility();
+        socket.emit('request_log_history');
     });
 
     socket.on('status_update', (data) => {
         console.log('Actualización de estado:', data);
         statusText.textContent = data.message;
-        statusIndicator.className = 'status-indicator'; // Reset classes
+        statusIndicator.className = 'status-dot'; // Reset classes
 
         // Actualizar estado actual
         currentState.isReady = data.isReady || false;
@@ -116,44 +190,15 @@ document.addEventListener('DOMContentLoaded', () => {
         updateButtonVisibility();
     });
 
-    socket.on('log_entry', (log) => {
-        if (!logBox) return;
-        const logEntry = document.createElement('div');
-        logEntry.className = `log-entry log-${log.level}`;
-        
-        const timestamp = new Date(log.timestamp).toLocaleTimeString();
-        const levelFormatted = `[${log.level.toUpperCase()}]`.padEnd(7, ' ');
-
-        // Create elements manually to avoid innerHTML issues and preserve formatting
-        const timestampSpan = document.createElement('span');
-        timestampSpan.className = 'log-timestamp';
-        timestampSpan.textContent = timestamp;
-
-        const levelSpan = document.createElement('span');
-        levelSpan.className = `log-level log-${log.level}`;
-        levelSpan.textContent = levelFormatted;
-
-        const messageSpan = document.createElement('span');
-        messageSpan.className = 'log-message';
-        messageSpan.textContent = log.message; // textContent automatically handles escaping
-
-        logEntry.appendChild(timestampSpan);
-        logEntry.appendChild(document.createTextNode(' ')); // Add space
-        logEntry.appendChild(levelSpan);
-        logEntry.appendChild(document.createTextNode(' ')); // Add space
-        logEntry.appendChild(messageSpan);
-        
-        // Añadir nueva entrada de log
-        logBox.appendChild(logEntry);
-
-        // Mantener solo los 30 mensajes más recientes
-        const maxLogEntries = 30;
-        while (logBox.children.length > maxLogEntries) {
-            logBox.removeChild(logBox.firstChild);
-        }
-
-        // Scroll to the bottom to show the latest message
+    socket.on('log_history', (logs) => {
+        if (!logBox || !Array.isArray(logs)) return;
+        logs.forEach((log) => appendLogEntry(log, false));
+        applyLogFiltersToDOM();
         logBox.scrollTop = logBox.scrollHeight;
+    });
+
+    socket.on('log_entry', (log) => {
+        appendLogEntry(log, true);
     });
 
     if (btnLogoutWhatsapp) {
@@ -177,10 +222,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    LOG_LEVELS.forEach((level) => {
+        const cb = document.getElementById(`filter-${level}`);
+        if (!cb) return;
+        const filters = getLogFilters();
+        cb.checked = filters[level] !== false;
+        cb.addEventListener('change', () => {
+            const f = getLogFilters();
+            f[level] = cb.checked;
+            saveLogFilters(f);
+            applyLogFiltersToDOM();
+        });
+    });
+
     if (btnClearLog) {
         btnClearLog.addEventListener('click', () => {
             if (logBox) {
-                logBox.innerHTML = ''; // Limpia la caja de logs
+                logBox.innerHTML = '';
             }
         });
     }
@@ -257,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('disconnect', () => {
         console.log('Desconectado del servidor de UI');
         statusText.textContent = 'Conexión con el servidor perdida';
-        statusIndicator.className = 'status-indicator disconnected';
+        statusIndicator.className = 'status-dot disconnected';
         
         // Resetear estado y ocultar todos los botones de acción cuando se pierde conexión con el servidor
         currentState.isReady = false;

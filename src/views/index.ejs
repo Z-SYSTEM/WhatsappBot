@@ -3,213 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Estado del Bot - <%= botName %></title>
+    <title><%= botName %></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
-    <style>
-        /* Aumenta el ancho del contenedor principal para que las columnas tengan más espacio */
-        .container {
-            max-width: 1400px;
-        }
-        
-        /* Estilos de Botones de Acción */
-        .actions-container .btn-action {
-            padding: 10px 15px;
-            font-size: 1em;
-            font-weight: bold;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            cursor: pointer;
-            transition: background-color 0.3s, transform 0.2s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        .actions-container .btn-action:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        .btn-start {
-            background-color: #28a745; /* Verde */
-        }
-        .btn-start:hover {
-            background-color: #218838;
-        }
-        .btn-stop {
-            background-color: #dc3545; /* Rojo */
-        }
-        .btn-stop:hover {
-            background-color: #c82333;
-        }
-
-        /* --- Nuevo Diseño Principal (Grid Layout) --- */
-        .main-wrapper {
-            display: grid;
-            grid-template-columns: 1fr 1fr; /* Dos columnas de igual tamaño */
-            gap: 2rem;
-            align-items: start; /* Alinea los elementos al inicio de su celda */
-        }
-
-        /* Header for the log column */
-        .log-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        .log-header h2 {
-            margin: 0;
-        }
-        .btn-clear-log {
-            padding: 6px 12px;
-            font-size: 0.9em;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .btn-clear-log:hover {
-            background-color: #5a6268;
-        }
-
-        /* Columna que contiene la caja de logs */
-        .log-column {
-            height: 85vh; /* Altura fija para la columna del log */
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Contenedor del título y la caja de logs */
-        .log-container {
-            flex-grow: 1; /* Permite que crezca para llenar .log-column */
-            display: flex;
-            flex-direction: column;
-            min-height: 0; /* Necesario para que el scroll funcione en un hijo de flex */
-        }
-
-        /* La caja de logs con scroll */
-        #log-box {
-            flex-grow: 1; /* Ocupa el espacio restante en .log-container */
-            overflow-y: auto; /* Habilita el scroll vertical cuando es necesario */
-        }
-
-        /* Oculta las secciones por defecto */
-        .send-message-container,
-        .contact-info-container {
-            display: none;
-        }
-
-        /* Estilos para versión */
-        .version-info {
-            text-align: right;
-            margin-bottom: 1rem;
-            padding: 0.5rem;
-            color: #666;
-            font-size: 0.9em;
-        }
-        .version-info strong {
-            color: #333;
-        }
-        .version-link {
-            margin-left: 10px;
-            color: #007bff;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .version-link:hover {
-            text-decoration: underline;
-        }
-        
-        /* Responsivo: apila las columnas en pantallas pequeñas */
-        @media (max-width: 900px) {
-            .main-wrapper {
-                grid-template-columns: 1fr; /* Diseño de una sola columna */
-            }
-            .log-column {
-                height: 50vh; /* Altura ajustada para la vista apilada */
-            }
-        }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-            <h1 style="margin: 0;">Estado del Bot: <%= botName %></h1>
-            <div class="version-info">
-                Versión: <strong><%= appVersion %></strong>
-                <a href="/api/version" target="_blank" class="version-link" id="version-link">Ver novedades</a>
+<body class="dashboard-body">
+    <div class="dashboard">
+        <header class="dashboard-header">
+            <div class="dashboard-brand">
+                <h1 class="dashboard-title"><%= botName %></h1>
+                <span class="dashboard-version">
+                    v<%= appVersion %>
+                    <a href="/api/version" target="_blank" class="dashboard-version-link">Ver novedades</a>
+                </span>
             </div>
-        </div>
-        <div class="main-wrapper">
-            <div class="content-column">
-                <div id="status-container">
-                    <div id="status-indicator" class="disconnected"></div>
-                    <p id="status-text">Desconectado</p>
-                </div>
-                <div id="qr-container">
-                    <p>Escanea el código QR para conectar</p>
-                    <canvas id="qr-canvas"></canvas>
-                </div>
+            <a href="/logout" class="btn-session-logout">Cerrar Sesión</a>
+        </header>
 
-                <div class="send-message-container">
-                    <h2>Enviar Mensaje</h2>
+        <main class="dashboard-main">
+            <aside class="dashboard-sidebar">
+                <section class="hero-card" id="hero-section">
+                    <div id="status-container" class="hero-status">
+                        <div id="status-indicator" class="status-dot disconnected"></div>
+                        <p id="status-text">Desconectado</p>
+                    </div>
+                    <div id="qr-container" class="hero-qr">
+                        <p class="hero-qr-label">Escanea el código QR con WhatsApp</p>
+                        <canvas id="qr-canvas"></canvas>
+                    </div>
+                </section>
+
+                <section class="bot-controls">
+                    <div class="actions-container">
+                        <button id="btn-start-bot" class="btn-action btn-start">Iniciar Bot</button>
+                        <button id="btn-stop-bot" class="btn-action btn-stop">Detener Bot</button>
+                        <button id="btn-logout-whatsapp" class="btn-action btn-logout-wa">Cerrar Sesión WhatsApp</button>
+                    </div>
+                </section>
+
+                <section class="send-message-container action-card">
+                    <h3 class="action-card-title">Enviar Mensaje</h3>
                     <form id="send-message-form">
                         <div class="form-group">
-                            <label for="send-phone">Número de Teléfono (ej: 5491122334455)</label>
-                            <input type="text" id="send-phone" name="phone" required placeholder="549...">
+                            <label for="send-phone">Teléfono</label>
+                            <input type="text" id="send-phone" name="phone" required placeholder="5491122334455">
                         </div>
                         <div class="form-group">
                             <label for="send-message">Mensaje</label>
-                            <textarea id="send-message" name="message" rows="2" required placeholder="Escribe tu mensaje aquí..."></textarea>
+                            <textarea id="send-message" name="message" rows="2" required placeholder="Escribe aquí..."></textarea>
                         </div>
-                        <button type="submit" class="btn-send-test">Enviar Mensaje</button>
+                        <button type="submit" class="btn-send-test">Enviar</button>
                     </form>
-                    <div id="send-message-status"></div>
-                </div>
+                    <div id="send-message-status" class="action-status"></div>
+                </section>
 
-                <div class="contact-info-container">
-                    <h2>Obtener Información de Contacto</h2>
+                <section class="contact-info-container action-card">
+                    <h3 class="action-card-title">Info de Contacto</h3>
                     <form id="contact-info-form">
                         <div class="form-group">
-                            <label for="contact-phone">Número de Teléfono (ej: 5491122334455)</label>
-                            <input type="text" id="contact-phone" name="phone" required placeholder="549...">
+                            <label for="contact-phone">Teléfono</label>
+                            <input type="text" id="contact-phone" name="phone" required placeholder="5491122334455">
                         </div>
-                        <button type="submit" class="btn-send-test">Obtener Información</button>
+                        <button type="submit" class="btn-send-test">Consultar</button>
                     </form>
-                    <div id="contact-info-status"></div>
+                    <div id="contact-info-status" class="action-status"></div>
                     <div id="contact-result" class="contact-result">
                         <div class="contact-result-header">
-                            <img id="contact-photo" class="contact-photo" src="" alt="Foto de perfil" onerror="this.style.display='none'">
+                            <img id="contact-photo" class="contact-photo" src="" alt="Foto" onerror="this.style.display='none'">
                             <div class="contact-details">
-                                <h3 id="contact-name">-</h3>
+                                <h4 id="contact-name">-</h4>
                                 <div class="contact-number" id="contact-number">-</div>
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
+            </aside>
 
-                <div class="actions-container">
-                    <a href="/logout" class="btn-logout">Cerrar Sesión UI</a>
-                    <button id="btn-logout-whatsapp" class="btn-logout btn-logout-whatsapp">Cerrar Sesión WhatsApp</button>
-                    <button id="btn-start-bot" class="btn-action btn-start">Iniciar Bot</button>
-                    <button id="btn-stop-bot" class="btn-action btn-stop">Detener Bot</button>
-                </div>
-            </div>
-
-            <div class="log-column">
-                <div class="log-container">
-                    <div class="log-header">
-                        <h2>Log en Tiempo Real</h2>
-                        <button id="btn-clear-log" class="btn-clear-log">Limpiar Log</button>
+            <section class="dashboard-console">
+                <div class="console-header">
+                    <h2 class="console-title">Consola</h2>
+                    <div class="log-filters">
+                        <label class="log-filter-pill"><input type="checkbox" id="filter-info" checked> Info</label>
+                        <label class="log-filter-pill"><input type="checkbox" id="filter-warn" checked> Warn</label>
+                        <label class="log-filter-pill"><input type="checkbox" id="filter-error" checked> Error</label>
+                        <label class="log-filter-pill"><input type="checkbox" id="filter-debug" checked> Debug</label>
                     </div>
-                    <div id="log-box"></div>
+                    <button id="btn-clear-log" class="btn-clear-log">Limpiar</button>
                 </div>
-            </div>
-        </div>
+                <div id="log-box" class="console-output"></div>
+            </section>
+        </main>
     </div>
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="/js/main.js"></script>
 </body>
 </html>
-

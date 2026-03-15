@@ -23,6 +23,18 @@ class Validators {
     return { valid: true, cleanPhone };
   }
 
+  // Validar LID (Linked ID) de WhatsApp - formato: 123456789@lid
+  static validateLid(lid) {
+    if (!lid || typeof lid !== 'string') {
+      return { valid: false, error: 'LID must be a non-empty string' };
+    }
+    const cleanLid = lid.trim();
+    if (!/^\d{6,25}@lid$/.test(cleanLid)) {
+      return { valid: false, error: 'Invalid LID format. Must be like: 264711786496203@lid' };
+    }
+    return { valid: true, cleanPhone: cleanLid };
+  }
+
   // Validar ID de grupo de WhatsApp
   static validateGroupId(groupId) {
     if (!groupId || typeof groupId !== 'string') {
@@ -389,9 +401,15 @@ class Validators {
     let contactValidation = null;
     let vcardValidation = null;
 
-    // Validar phoneNumber (puede ser número de teléfono o ID de grupo)
+    // Validar phoneNumber (puede ser número de teléfono, ID de grupo o LID)
     let phoneValidation;
-    if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@g.us')) {
+    if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@lid')) {
+      // Es un LID (Linked ID), validar formato
+      phoneValidation = this.validateLid(sanitizedPayload.phoneNumber);
+      if (!phoneValidation.valid) {
+        errors.push(phoneValidation.error);
+      }
+    } else if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@g.us')) {
       // Es un ID de grupo, validar como grupo
       phoneValidation = this.validateGroupId(sanitizedPayload.phoneNumber);
       if (!phoneValidation.valid) {

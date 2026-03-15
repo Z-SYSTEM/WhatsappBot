@@ -1,5 +1,4 @@
 import express from 'express';
-import { logger } from '../logger.js';
 
 const router = express.Router();
 
@@ -10,19 +9,7 @@ function setupHealthRoutes(bot, config, authenticateToken) {
   // Endpoint de health check
   router.get('/test', authenticateToken, (req, res) => {
     const status = bot.getStatus();
-    
-    // Solo loguear si hay un problema (bot no está ready)
-    if (!status.isReady) {
-      let clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
-      
-      // Extraer solo la IPv4 si viene con prefijo ::ffff:
-      if (clientIP && clientIP.startsWith('::ffff:')) {
-        clientIP = clientIP.substring(7);
-      }
-      
-      logger.warn(`[HEALTH_CHECK] Bot not ready - Health check from ${clientIP}`);
-    }
-    
+
     res.json({
       status: 'ok',
       bot_name: config.botName,
