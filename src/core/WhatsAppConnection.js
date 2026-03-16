@@ -143,8 +143,8 @@ class WhatsAppConnection {
         keepAliveIntervalMs: 30000, // Restaurado
         retryRequestDelayMs: 250, // Restaurado
         markOnlineOnConnect: true, // Restaurado a true
-        getMessage: async (key) => { // Restaurado
-          return { conversation: '' };
+        getMessage: async (key) => {
+          return undefined; // Sin store de mensajes; undefined evita mensajes vacíos al destinatario (issue #676)
         }
       });
 
