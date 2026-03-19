@@ -50,9 +50,9 @@ class MessageHandler {
 
       // Datos temporales del mensaje
       const messageData = {
-        phoneNumber: msg.key.remoteJid.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+        phoneNumber: msg.key.remoteJid,
         type: _MESSAGE_TYPE_CHAT,
-        from: (msg.key.participant || msg.key.remoteJid).replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', ''),
+        from: msg.key.participant || msg.key.remoteJid,
         id: msg.key.id,
         timestamp: msg.messageTimestamp,
         body: '',

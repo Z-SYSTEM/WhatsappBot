@@ -34,9 +34,9 @@ class CallHandler {
       
       // Crear datos del mensaje
       const messageData = {
-        phoneNumber: callData.from.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+        phoneNumber: callData.from,
         type: _MESSAGE_TYPE_CALL,
-        from: callData.from.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', ''),
+        from: callData.from,
         id: `call_${Date.now()}`,
         timestamp: Math.floor(Date.now() / 1000),
         body: 'Llamada entrante rechazada automáticamente',

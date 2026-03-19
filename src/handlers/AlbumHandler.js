@@ -143,7 +143,7 @@ class AlbumHandler {
 
       // Crear datos del álbum para el webhook
       const albumMessageData = {
-        phoneNumber: from.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+        phoneNumber: from,
         type: _MESSAGE_TYPE_ALBUM,
         from: from,
         id: `album_${albumId}`,

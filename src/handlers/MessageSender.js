@@ -140,7 +140,7 @@ class MessageSender {
     });
     
     const webhookData = {
-      phoneNumber: jid.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+      phoneNumber: jid,
       type: _MESSAGE_TYPE_IMAGE,
       from: jid,
       id: sentMessage.key?.id || `img_${Date.now()}`,
