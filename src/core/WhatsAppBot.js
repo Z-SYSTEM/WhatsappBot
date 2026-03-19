@@ -7,6 +7,49 @@ import MessageHandler from '../handlers/MessageHandler.js';
 import MessageSender from '../handlers/MessageSender.js';
 import CallHandler from '../handlers/CallHandler.js';
 
+/** Retención de logs ONMESSAGE (solo se mantienen archivos más recientes que esto) */
+const ONMESSAGE_LOG_RETENTION_MS = 24 * 60 * 60 * 1000;
+/** No ejecutar limpieza en cada request (evita muchos readdir/stat seguidos) */
+const ONMESSAGE_PRUNE_MIN_INTERVAL_MS = 60 * 1000;
+
+let lastOnMessagePruneAt = 0;
+
+/**
+ * Elimina JSON en logs/onmessage-requests/ con mtime anterior a 24h.
+ */
+async function pruneOnMessageRequestLogs(logDir, fs, path) {
+  const now = Date.now();
+  if (now - lastOnMessagePruneAt < ONMESSAGE_PRUNE_MIN_INTERVAL_MS) {
+    return;
+  }
+  lastOnMessagePruneAt = now;
+
+  const cutoff = now - ONMESSAGE_LOG_RETENTION_MS;
+  let removed = 0;
+
+  try {
+    const entries = await fs.readdir(logDir);
+    for (const name of entries) {
+      if (!name.endsWith('.json')) continue;
+      const fullPath = path.join(logDir, name);
+      try {
+        const stat = await fs.stat(fullPath);
+        if (stat.isFile() && stat.mtimeMs < cutoff) {
+          await fs.unlink(fullPath);
+          removed++;
+        }
+      } catch {
+        // archivo borrado por otro proceso o sin acceso
+      }
+    }
+    if (removed > 0) {
+      logger.debug(`[ONMESSAGE_LOG] Limpieza: eliminados ${removed} archivo(s) con más de 24h`);
+    }
+  } catch (err) {
+    logger.warn(`[ONMESSAGE_LOG] Error al limpiar logs antiguos: ${err.message}`);
+  }
+}
+
 /**
  * Función para guardar logs de requests POST en onMessage
  */
@@ -16,14 +59,16 @@ async function logOnMessageRequest(requestData) {
     const path = await import('path');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const logDir = path.default.join('logs', 'onmessage-requests');
-    
+
     await fs.default.ensureDir(logDir);
-    
+
     const logFile = path.default.join(logDir, `request-${timestamp}.json`);
-    
+
     await fs.default.writeFile(logFile, JSON.stringify(requestData, null, 2));
-    
+
     logger.debug(`[ONMESSAGE_LOG] Request guardado en archivo: ${logFile}`);
+
+    await pruneOnMessageRequestLogs(logDir, fs.default, path.default);
   } catch (error) {
     logger.error('[ONMESSAGE_LOG] Error guardando log de request:', error.message);
   }
