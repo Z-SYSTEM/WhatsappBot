@@ -164,6 +164,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Actualizar estado actual
         currentState.isReady = data.isReady || false;
         currentState.isConnecting = data.isConnecting || false;
+        // Sin conexión activa ni QR en curso: no dejar hasQR bloqueando "Iniciar bot"
+        if (!currentState.isReady && !currentState.isConnecting) {
+            currentState.hasQR = false;
+            if (qrContainer) qrContainer.style.display = 'none';
+        }
 
         if (data.isReady) {
             statusIndicator.classList.add('connected');

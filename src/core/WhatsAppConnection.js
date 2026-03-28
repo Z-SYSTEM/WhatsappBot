@@ -208,7 +208,9 @@ class WhatsAppConnection {
         this.io.emit('status_update', { isReady: true, isConnecting: false, message: 'Bot conectado exitosamente' });
         this.io.emit('qr_update', null);
       } else if (connection === 'close') {
+        this.currentQR = null;
         this.io.emit('status_update', { isReady: false, isConnecting: false, message: 'Bot desconectado' });
+        this.io.emit('qr_update', null);
       } else if (connection === 'connecting') {
         this.io.emit('status_update', { isReady: false, isConnecting: true, message: 'Conectando...' });
       }

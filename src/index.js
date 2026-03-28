@@ -193,6 +193,20 @@ async function startServer() {
     }
   }
 
+  /** Sincroniza estado y QR con todos los clientes (p. ej. tras detener el bot sin depender solo de Baileys). */
+  function emitBotUiStateToAll(message) {
+    if (!io || !bot) return;
+    const status = bot.getStatus();
+    io.emit('status_update', {
+      isReady: !!status.isReady,
+      isConnecting: !!status.isConnecting,
+      message:
+        message ??
+        (status.isReady ? 'Bot conectado' : status.isConnecting ? 'Conectando...' : 'Bot desconectado'),
+    });
+    io.emit('qr_update', null);
+  }
+
   // Configurar eventos de Socket.IO
   io.on('connection', async (socket) => {
     // Proteger conexión de socket
@@ -294,6 +308,8 @@ async function startServer() {
               await bot.disconnect({ isLogout: true });
           } catch (error) {
               logger.error('[WEB_UI] Error al detener el bot:', error.message);
+          } finally {
+              emitBotUiStateToAll('Bot desconectado');
           }
       } else {
           logger.warn('[WEB_UI] Se intentó detener un bot que no está conectado.');
