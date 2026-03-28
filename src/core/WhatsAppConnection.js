@@ -49,7 +49,10 @@ class WhatsAppConnection {
       'Invalid PreKey ID',
       'No session record',
       'No session found to decrypt message',
-      'no name present, ignoring presence update request'
+      'no name present, ignoring presence update request',
+      // Estados (status@broadcast): sesión Signal / libsignal a veces falla al descifrar; ya no se procesan en handleMessagesUpsert
+      "Cannot create property 'senderMessageKeys'",
+      'senderMessageKeys'
     ];
     
     const getMessageText = (data) => {
@@ -70,6 +73,9 @@ class WhatsAppConnection {
     };
 
     const shouldIgnore = (data) => {
+      if (typeof data === 'object' && data !== null && data.key?.remoteJid?.includes('@broadcast')) {
+        return true;
+      }
       const messageText = getMessageText(data);
       if (!messageText) return false;
       
