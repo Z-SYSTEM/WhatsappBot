@@ -235,14 +235,17 @@ class WhatsAppConnection {
 
     const disconnectReason = lastDisconnect?.error instanceof Boom ? lastDisconnect.error.output?.statusCode : null;
 
-    // Detect custom conflict payloads (ej: <conflict type="device_removed"/>)
-    let deviceRemovedConflict = false;
+    // Conflictos de sesión en el stream (otra Web, multidispositivo, sesión reemplazada)
+    let streamSessionConflict = false;
     try {
       const content = lastDisconnect?.error?.data?.content;
       if (Array.isArray(content)) {
         for (const item of content) {
-          if (item?.tag === 'conflict' && item?.attrs?.type === 'device_removed') {
-            deviceRemovedConflict = true;
+          if (
+            item?.tag === 'conflict' &&
+            ['device_removed', 'replaced'].includes(item?.attrs?.type)
+          ) {
+            streamSessionConflict = true;
             break;
           }
         }
@@ -272,9 +275,11 @@ class WhatsAppConnection {
       return; // Stop further processing
     }
 
-    // If conflict indicates device_removed, treat it as a reconnectable conflict
-    if (deviceRemovedConflict) {
-      logger.warn('[WA_CONNECTION] Conflict detected: device_removed. No se limpiará la sesión; intentando reconectar conservando credenciales.');
+    // Conflicto de sesión (p. ej. otra WhatsApp Web abrió sesión y reemplazó esta)
+    if (streamSessionConflict) {
+      logger.warn(
+        '[WA_CONNECTION] Conflict de sesión (device_removed / replaced). No se limpiará la sesión; intentando reconectar conservando credenciales.'
+      );
       logger.warn(`[WA_CONNECTION] Detalle conflict payload: ${JSON.stringify(lastDisconnect?.error?.data?.content || {}, null, 2)}`);
       
       this.isConnected = false;

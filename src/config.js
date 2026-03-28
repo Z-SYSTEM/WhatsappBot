@@ -25,7 +25,8 @@ const config = {
   healthCheckMaxSilenceMinutes: parseInt(process.env.HEALTH_CHECK_MAX_SILENCE_MINUTES, 10) || 10,
 
   // Message sending retry configuration
-  messageRetryWaitMs: parseInt(process.env.MESSAGE_RETRY_WAIT_MS, 10) || 5000,
+  // Tras conflictos de sesión (varias WhatsApp Web, etc.) la reconexión puede tardar >5s
+  messageRetryWaitMs: parseInt(process.env.MESSAGE_RETRY_WAIT_MS, 10) || 15000,
   messageRetryPollIntervalMs: 500,
 
   // Directories

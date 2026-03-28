@@ -296,8 +296,9 @@ class WhatsAppBot {
     const isWsOpen = sock.ws?.isOpen ?? false;
     const isBotReady = this.isReady();
 
-    // Caso 1: El bot se cree conectado, pero el websocket está cerrado. Es un estado "trabado".
-    if (isBotReady && !isWsOpen) {
+    // Caso 1: estado interno "listo" pero WebSocket cerrado (zombie). No usar solo isReady() aquí:
+    // hasUsableSocketForSending() ya sería false y no entraríamos a reconectar.
+    if (this.botStatus.isReady && !isWsOpen) {
       logger.error('[HEALTH_CHECK] ¡FALLO! El bot se reporta como listo pero el WebSocket está cerrado. Forzando reconexión...');
       await this.reconnect();
       return;
@@ -343,12 +344,12 @@ class WhatsAppBot {
    * Envía un mensaje con lógica de espera y retry
    */
   async sendMessage(data) {
-    const maxWaitTime = this.config.messageRetryWaitMs || 5000;
+    const maxWaitTime = this.config.messageRetryWaitMs || 15000;
     const pollInterval = this.config.messageRetryPollIntervalMs || 500;
     const maxAttempts = Math.ceil(maxWaitTime / pollInterval);
     
-    // Verificar si está listo inmediatamente
-    if (this.isReady() && this.messageSender) {
+    // Verificar si hay socket usable (evita null.sendMessage tras conflictos / otras sesiones Web)
+    if (this.isReady()) {
       logger.debug('[WHATSAPP_BOT] Bot listo, enviando mensaje inmediatamente.');
       return await this.messageSender.sendMessage(data);
     }
@@ -360,8 +361,7 @@ class WhatsAppBot {
       // Esperar el intervalo de polling
       await new Promise(resolve => setTimeout(resolve, pollInterval));
       
-      // Verificar si ya está listo
-      if (this.isReady() && this.messageSender) {
+      if (this.isReady()) {
         logger.info(`[WHATSAPP_BOT] Bot reconectado después de ${attempt * pollInterval}ms. Enviando mensaje.`);
         return await this.messageSender.sendMessage(data);
       }
@@ -376,12 +376,31 @@ class WhatsAppBot {
   }
 
   /**
+   * Comprueba que exista un socket Baileys coherente con la conexión y usable para enviar.
+   * Evita enviar con bot "listo" en papel pero socket null o WebSocket cerrado (p. ej. conflict stream / otra Web).
+   */
+  hasUsableSocketForSending() {
+    if (!this.botStatus.isReady || !this.messageSender || !this.connection) {
+      return false;
+    }
+    const sock = this.connection.getSocket();
+    if (!sock || !this.messageSender.sock || this.messageSender.sock !== sock) {
+      return false;
+    }
+    if (sock.user == null) {
+      return false;
+    }
+    if (sock.ws != null && sock.ws.isOpen === false) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * Verifica si el bot está listo
    */
   isReady() {
-    // botStatus.isReady ya refleja el estado de la conexión y se actualiza en los callbacks
-    // Verificamos también que messageSender esté inicializado para asegurar que podemos enviar mensajes
-    return this.botStatus.isReady && this.messageSender !== null;
+    return this.hasUsableSocketForSending();
   }
 
   /**

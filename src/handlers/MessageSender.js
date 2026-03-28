@@ -19,6 +19,12 @@ class MessageSender {
    * Wrapper for sock.sendMessage with timeout and retry for 'No session record'
    */
   async _sendMessageWithRetry(jid, content, timeout = 8000) {
+    if (!this.sock || typeof this.sock.sendMessage !== 'function') {
+      throw new Error(
+        'Socket de WhatsApp no disponible (sesión desconectada o reconectando). Reintenta en unos segundos.'
+      );
+    }
+
     const contentForLog = {};
     for (const [k, v] of Object.entries(content || {})) {
       if (Buffer.isBuffer(v)) {
