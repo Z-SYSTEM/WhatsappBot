@@ -82,12 +82,9 @@ class MessageSender {
    * Normaliza el JID (ID de WhatsApp)
    */
   normalizeJid(phone) {
-    // Detectar si es un grupo (@g.us), contacto individual (@c.us) o LID (@lid)
-    if (phone.includes('@g.us') || phone.includes('@c.us') || phone.includes('@lid')) {
-      return phone;
+    if (phone.includes('@')) {
+      return phone.trim();
     }
-    
-    // Es un número sin formato, solo quitar el + si es el primer carácter
     let cleanPhone = phone;
     if (cleanPhone.startsWith('+')) {
       cleanPhone = cleanPhone.substring(1);

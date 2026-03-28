@@ -1,26 +1,58 @@
 import { logger } from './logger.js';
 
 class Validators {
-  // Validar número de teléfono
+  // Normalizar string de teléfono: solo dígitos; conserva + inicial si el texto lo tenía
+  static normalizePhoneDigits(phoneNumber) {
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      return null;
+    }
+    const trimmed = phoneNumber.trim();
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    if (digitsOnly.length === 0) {
+      return null;
+    }
+    const leadingPlus = trimmed.startsWith('+');
+    return leadingPlus ? `+${digitsOnly}` : digitsOnly;
+  }
+
+  // Validar número de teléfono (sin @; acepta espacios, guiones, etc.)
   static validatePhoneNumber(phoneNumber) {
     if (!phoneNumber || typeof phoneNumber !== 'string') {
       return { valid: false, error: 'phoneNumber must be a non-empty string' };
     }
 
-    // Remover espacios y caracteres especiales
-    const cleanPhone = phoneNumber.replace(/[\s\-\(\)\.]/g, '');
-    
-    // Validar formato internacional
-    if (!/^\+?[1-9]\d{1,14}$/.test(cleanPhone)) {
+    const cleanPhone = this.normalizePhoneDigits(phoneNumber);
+    if (!cleanPhone) {
       return { valid: false, error: 'Invalid phone number format. Must be international format (e.g., +1234567890)' };
     }
 
-    // Validar longitud mínima y máxima
-    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+    const digits = cleanPhone.replace(/^\+/, '');
+    if (digits.length < 10 || digits.length > 15) {
       return { valid: false, error: 'Phone number must be between 10 and 15 digits' };
     }
 
+    if (!/^[1-9]\d{9,14}$/.test(digits)) {
+      return { valid: false, error: 'Invalid phone number format. Must be international format (e.g., +1234567890)' };
+    }
+
     return { valid: true, cleanPhone };
+  }
+
+  // JID genérico (p. ej. user@s.whatsapp.net): formato mínimo razonable
+  static validateGenericJid(jid) {
+    if (!jid || typeof jid !== 'string') {
+      return { valid: false, error: 'JID must be a non-empty string' };
+    }
+    const t = jid.trim();
+    const at = t.indexOf('@');
+    if (at <= 0) {
+      return { valid: false, error: 'Invalid WhatsApp JID' };
+    }
+    const domain = t.slice(at + 1);
+    if (!domain || /\s/.test(t)) {
+      return { valid: false, error: 'Invalid WhatsApp JID' };
+    }
+    return { valid: true, cleanPhone: t };
   }
 
   // Validar LID (Linked ID) de WhatsApp - formato: 123456789@lid
@@ -404,19 +436,21 @@ class Validators {
     // Validar phoneNumber (puede ser número de teléfono, ID de grupo o LID)
     let phoneValidation;
     if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@lid')) {
-      // Es un LID (Linked ID), validar formato
       phoneValidation = this.validateLid(sanitizedPayload.phoneNumber);
       if (!phoneValidation.valid) {
         errors.push(phoneValidation.error);
       }
     } else if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@g.us')) {
-      // Es un ID de grupo, validar como grupo
       phoneValidation = this.validateGroupId(sanitizedPayload.phoneNumber);
       if (!phoneValidation.valid) {
         errors.push(phoneValidation.error);
       }
+    } else if (sanitizedPayload.phoneNumber && sanitizedPayload.phoneNumber.includes('@')) {
+      phoneValidation = this.validateGenericJid(sanitizedPayload.phoneNumber);
+      if (!phoneValidation.valid) {
+        errors.push(phoneValidation.error);
+      }
     } else {
-      // Es un número de teléfono, validar como teléfono
       phoneValidation = this.validatePhoneNumber(sanitizedPayload.phoneNumber);
       if (!phoneValidation.valid) {
         errors.push(phoneValidation.error);

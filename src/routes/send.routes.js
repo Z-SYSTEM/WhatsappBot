@@ -25,16 +25,16 @@ function setupSendRoutes(bot, authenticateToken) {
 
       const { phoneNumber, message, imageUrl, imageUrls, pdfUrl, contact, vcard } = validation.payload;
 
-      // Preparar chatId (soporta @g.us, @c.us y @lid)
+      // Preparar chatId: cualquier JID con @ tal cual; si no, dígitos normalizados + @c.us
       let chatId;
-      if (phoneNumber.includes('@g.us') || phoneNumber.includes('@c.us') || phoneNumber.includes('@lid')) {
-        chatId = phoneNumber;
+      if (phoneNumber.includes('@')) {
+        chatId = phoneNumber.trim();
       } else {
         let cleanPhone = phoneNumber;
         if (cleanPhone.startsWith('+')) {
           cleanPhone = cleanPhone.substring(1);
         }
-        chatId = cleanPhone + "@c.us";
+        chatId = cleanPhone + '@c.us';
       }
 
       // Control de destinatarios no válidos
