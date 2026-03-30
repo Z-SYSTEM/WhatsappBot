@@ -393,6 +393,20 @@ class WhatsAppConnection {
         logger.debug(`[WA_CONNECTION] Received empty messages.upsert event`);
         return;
     }
+
+    try {
+      const keySnap = msg.key ? {
+        remoteJid: msg.key.remoteJid,
+        remoteJidAlt: msg.key.remoteJidAlt,
+        participant: msg.key.participant,
+        senderPn: msg.key.senderPn,
+        id: msg.key.id,
+        fromMe: msg.key.fromMe
+      } : {};
+      logger.info(`[INBOUND_RAW] type=${m.type || '?'} n=${m.messages?.length ?? 0} key=${JSON.stringify(keySnap)} pushName=${msg.pushName || ''}`);
+    } catch (e) {
+      logger.debug(`[INBOUND_RAW] log error: ${e.message}`);
+    }
     
     // Filtrar mensajes: procesar mensajes de chat individual y grupos, pero no status
     if (!msg.key.fromMe && msg.message && !msg.key.remoteJid.includes('@broadcast')) {

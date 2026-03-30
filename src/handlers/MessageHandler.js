@@ -115,7 +115,7 @@ class MessageHandler {
     logMessage.received(messageData);
 
     // Enviar webhook si está configurado
-    await this.sendWebhook(messageData);
+    await this.sendWebhook(messageData, msg);
   }
 
   /**
@@ -269,7 +269,7 @@ class MessageHandler {
       logMessage.received(contactMessageData);
       
       // Enviar webhook para cada contacto
-      await this.sendWebhook(contactMessageData);
+      await this.sendWebhook(contactMessageData, msg);
     }
   }
 
@@ -297,9 +297,32 @@ class MessageHandler {
   }
 
   /**
+   * Campos extra del mensaje Baileys para ingesta en Soporte (LID + PN, etc.).
+   */
+  extractInboundMeta(msg) {
+    if (!msg || !msg.key) {
+      return {};
+    }
+    const meta = {};
+    if (msg.key.remoteJidAlt) {
+      meta.remoteJidAlt = msg.key.remoteJidAlt;
+    }
+    if (msg.key.senderPn) {
+      meta.senderPn = msg.key.senderPn;
+    }
+    if (msg.key.participant) {
+      meta.participant = msg.key.participant;
+    }
+    if (msg.pushName) {
+      meta.pushName = msg.pushName;
+    }
+    return meta;
+  }
+
+  /**
    * Envía webhook si está configurado
    */
-  async sendWebhook(messageData) {
+  async sendWebhook(messageData, rawMsg = null) {
     if (!this.onMessageUrl) {
       return;
     }
@@ -315,7 +338,8 @@ class MessageHandler {
         body: messageData.body || '',
         hasMedia: messageData.hasMedia || false,
         data: messageData.data || {},
-        isForwarded: messageData.isForwarded || false
+        isForwarded: messageData.isForwarded || false,
+        ...(rawMsg ? this.extractInboundMeta(rawMsg) : {})
       };
       
       // Verificar que los datos se pueden serializar correctamente
@@ -325,6 +349,12 @@ class MessageHandler {
         logger.error('[MESSAGE_HANDLER] Error serializando datos del webhook:', serializeError.message);
         return;
       }
+
+      const logPayload = {
+        ...webhookData,
+        data: webhookData.hasMedia ? '[media omitted]' : webhookData.data
+      };
+      logger.info(`[WEBHOOK_OUTBOUND] ${JSON.stringify(logPayload)}`);
       
       // Enviar webhook
       await this.httpClient.sendWebhook(this.onMessageUrl, webhookData, this.logOnMessageRequest);
