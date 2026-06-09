@@ -55,12 +55,21 @@ class MediaProcessor {
    * @param {string} phoneNumber - Número de teléfono del remitente
    * @returns {Promise<string>} Datos en base64
    */
-  static async downloadMediaAsBase64(msg, phoneNumber) {
+  static async downloadMediaAsBase64(msg, phoneNumber, sock = null) {
     try {
       logger.debug(`[MEDIA_PROCESSOR] Iniciando descarga de media para ${phoneNumber}`);
-      
-      const result = await downloadMediaMessage(msg);
-      const buffer = await this.convertToBuffer(result);
+
+      const ctx = sock ? {
+        logger: {
+          info: (data, msg) => logger.debug(`[MEDIA_PROCESSOR] ${msg || ''}`, data),
+          warn: (data, msg) => logger.warn(`[MEDIA_PROCESSOR] ${msg || ''}`, data),
+          error: (data, msg) => logger.error(`[MEDIA_PROCESSOR] ${msg || ''}`, data)
+        },
+        reuploadRequest: (message) => sock.updateMediaMessage(message)
+      } : undefined;
+
+      const result = await downloadMediaMessage(msg, 'buffer', {}, ctx);
+      const buffer = Buffer.isBuffer(result) ? result : await this.convertToBuffer(result);
       const base64Data = buffer.toString('base64');
       
       logger.debug(`[MEDIA_PROCESSOR] Media descargado exitosamente para ${phoneNumber}, tamaño: ${buffer.length} bytes, base64: ${base64Data.length} caracteres`);

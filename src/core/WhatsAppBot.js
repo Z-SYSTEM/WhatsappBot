@@ -145,6 +145,9 @@ class WhatsAppBot {
         this.botStatus.isConnecting = true; // Asumimos que intentará reconectar
         // Limpiar messageSender para evitar usar socket muerto
         this.messageSender = null;
+        if (this.messageHandler?.updateSocket) {
+          this.messageHandler.updateSocket(null);
+        }
         logger.debug('[WHATSAPP_BOT] MessageSender limpiado debido a desconexión.');
       };
       
@@ -187,8 +190,9 @@ class WhatsAppBot {
       this.config.onMessage
     );
     
-    // Actualizar CallHandler con el socket
+    // Actualizar CallHandler y MessageHandler con el socket
     this.callHandler.updateSocket(sock);
+    this.messageHandler.updateSocket(sock);
 
     this.botStatus.isReady = true;
     this.botStatus.isConnecting = false;
@@ -495,10 +499,16 @@ class WhatsAppBot {
       // Para LIDs, el número puede no estar disponible por privacidad
       let phoneNumberValue = null;
       if (isLid) {
-        // Intentar obtener el número del contacto si está disponible
-        phoneNumberValue = contactData?.phoneNumber || contactData?.id?.replace('@c.us', '') || null;
+        if (contactData?.phoneNumber) {
+          phoneNumberValue = String(contactData.phoneNumber).replace(/\D/g, '');
+        } else if (typeof sock.signalRepository?.lidMapping?.getPNForLID === 'function') {
+          const pnJid = await sock.signalRepository.lidMapping.getPNForLID(wid);
+          phoneNumberValue = pnJid ? pnJid.replace('@s.whatsapp.net', '').replace('@c.us', '') : null;
+        } else {
+          phoneNumberValue = contactData?.id?.replace('@c.us', '').replace('@s.whatsapp.net', '') || null;
+        }
       } else {
-        phoneNumberValue = wid.replace('@c.us', '');
+        phoneNumberValue = wid.replace('@c.us', '').replace('@s.whatsapp.net', '');
       }
       
       return {
@@ -564,9 +574,13 @@ class WhatsAppBot {
       
       if (groupMetadata.participants && Array.isArray(groupMetadata.participants)) {
         for (const participant of groupMetadata.participants) {
+          const participantJid = participant.id || participant.jid;
+          const participantNumber = participant.phoneNumber
+            || participantJid?.replace('@c.us', '').replace('@s.whatsapp.net', '').replace('@lid', '')
+            || '';
           const participantInfo = {
-            id: participant.id,
-            number: participant.id.replace('@c.us', '').replace('@s.whatsapp.net', ''),
+            id: participantJid,
+            number: participantNumber,
             isAdmin: participant.admin === 'admin' || participant.admin === 'superadmin',
             isSuperAdmin: participant.admin === 'superadmin'
           };

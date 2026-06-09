@@ -1,4 +1,11 @@
-import { makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import {
+  makeWASocket,
+  DisconnectReason,
+  useMultiFileAuthState,
+  Browsers,
+  fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore
+} from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { logger } from '../logger.js';
 import fs from 'fs-extra';
@@ -128,6 +135,10 @@ class WhatsAppConnection {
       }
       
       const { state, saveCreds } = await useMultiFileAuthState(this.config.dirs.sessions);
+      const auth = {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, this.baileysLogger)
+      };
       
       try {
         const latest = await fetchLatestBaileysVersion();
@@ -138,9 +149,8 @@ class WhatsAppConnection {
       }
 
       this.sock = makeWASocket({
-        auth: state,
+        auth,
         logger: this.baileysLogger,
-        printQRInTerminal: false,
         browser: Browsers.ubuntu('Desktop'), // Cambiado para mayor compatibilidad
         version,
         syncFullHistory: false, // Restaurado
@@ -153,6 +163,11 @@ class WhatsAppConnection {
           return undefined; // Sin store de mensajes; undefined evita mensajes vacíos al destinatario (issue #676)
         }
       });
+
+      // Socket disponible para descarga de media (Baileys 7 requiere reuploadRequest)
+      if (this.messageHandler?.updateSocket) {
+        this.messageHandler.updateSocket(this.sock);
+      }
 
       // Configurar eventos
       this.setupEvents(saveCreds);

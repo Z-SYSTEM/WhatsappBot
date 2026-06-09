@@ -20,6 +20,14 @@ class MessageHandler {
     this.onMessageUrl = onMessageUrl;
     this.logOnMessageRequest = logOnMessageRequest;
     this.onMessageReceived = onMessageReceived; // Callback to update timestamp
+    this.sock = null;
+  }
+
+  /**
+   * Actualiza el socket de WhatsApp (necesario para descargar media en Baileys 7+)
+   */
+  updateSocket(sock) {
+    this.sock = sock;
   }
 
   /**
@@ -146,7 +154,7 @@ class MessageHandler {
     messageData.isForwarded = this.isMessageForwarded(msg.message.imageMessage);
     
     try {
-      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber);
+      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber, this.sock);
       messageData.data.data = base64Data;
     } catch (error) {
       logger.error(`[MESSAGE_HANDLER] Error descargando imagen: ${error.message}`);
@@ -164,7 +172,7 @@ class MessageHandler {
     messageData.isForwarded = this.isMessageForwarded(msg.message.videoMessage);
     
     try {
-      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber);
+      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber, this.sock);
       messageData.data.data = base64Data;
     } catch (error) {
       logger.debug(`[MESSAGE_HANDLER] No se pudo descargar video: ${error.message}`);
@@ -181,7 +189,7 @@ class MessageHandler {
     messageData.isForwarded = this.isMessageForwarded(msg.message.audioMessage);
     
     try {
-      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber);
+      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber, this.sock);
       messageData.data.data = base64Data;
     } catch (error) {
       logger.debug(`[MESSAGE_HANDLER] No se pudo descargar audio: ${error.message}`);
@@ -199,7 +207,7 @@ class MessageHandler {
     messageData.isForwarded = this.isMessageForwarded(msg.message.documentMessage);
     
     try {
-      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber);
+      const base64Data = await MediaProcessor.downloadMediaAsBase64(msg, messageData.phoneNumber, this.sock);
       messageData.data.data = base64Data;
     } catch (error) {
       logger.debug(`[MESSAGE_HANDLER] No se pudo descargar documento: ${error.message}`);
